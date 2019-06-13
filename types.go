@@ -179,27 +179,61 @@ func (c *registry) buildInputObjectFieldFromAST(definition *ast.InputValueDefini
 // builds an object from an AST
 func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition) error {
 	name := definition.Name.Value
+	extensions := c.getExtensions(name, definition.GetKind())
+
 	var ifacesThunk graphql.InterfacesThunk = func() []*graphql.Interface {
+		imap := map[string]bool{}
 		ifaces := []*graphql.Interface{}
-		for _, ifaceDef := range definition.Interfaces {
-			if iface, err := c.getType(ifaceDef.Name.Value); err == nil {
-				ifaces = append(ifaces, iface.(*graphql.Interface))
+
+		// build list of interfaces and append extensions
+		ifaceDefs := append([]*ast.Named{}, definition.Interfaces...)
+		for _, extDef := range extensions {
+			ifaceDefs = append(ifaceDefs, extDef.(*ast.ObjectDefinition).Interfaces...)
+		}
+
+		// add defined interfaces
+		for _, ifaceDef := range ifaceDefs {
+			if _, ok := imap[ifaceDef.Name.Value]; !ok {
+				if iface, err := c.getType(ifaceDef.Name.Value); err == nil {
+					ifaces = append(ifaces, iface.(*graphql.Interface))
+					imap[ifaceDef.Name.Value] = true
+				} else {
+					// TODO: add warning here somehow
+					continue
+				}
 			} else {
-				return nil
+				// TODO: add warning here somehow
 			}
 		}
+
 		return ifaces
 	}
 
 	var fieldsThunk graphql.FieldsThunk = func() graphql.Fields {
+		fmap := map[string]bool{}
 		fields := graphql.Fields{}
-		for _, fieldDef := range definition.Fields {
-			if field, err := c.buildFieldFromAST(fieldDef, definition.GetKind(), name); err == nil {
-				fields[fieldDef.Name.Value] = field
+
+		// build list of fields and append extensions
+		fieldDefs := append([]*ast.FieldDefinition{}, definition.Fields...)
+		for _, extDef := range extensions {
+			fieldDefs = append(fieldDefs, extDef.(*ast.ObjectDefinition).Fields...)
+		}
+
+		// add defined fields
+		for _, fieldDef := range fieldDefs {
+			if _, ok := fmap[fieldDef.Name.Value]; !ok {
+				if field, err := c.buildFieldFromAST(fieldDef, definition.GetKind(), name); err == nil {
+					fields[fieldDef.Name.Value] = field
+					fmap[fieldDef.Name.Value] = true
+				} else {
+					// TODO: add warning here somehow
+					continue
+				}
 			} else {
-				return nil
+				// TODO: add warning here somehow
 			}
 		}
+
 		return fields
 	}
 
@@ -210,7 +244,21 @@ func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition) error {
 		Fields:      fieldsThunk,
 	}
 
-	if err := c.applyDirectives(&objectConfig, definition.Directives); err != nil {
+	// update description from extensions if none
+	for _, extDef := range extensions {
+		if objectConfig.Description != "" {
+			break
+		}
+		objectConfig.Description = getDescription(extDef.(*ast.ObjectDefinition))
+	}
+
+	// create a combined directives array
+	directiveDefs := append([]*ast.Directive{}, definition.Directives...)
+	for _, extDef := range extensions {
+		directiveDefs = append(directiveDefs, extDef.(*ast.ObjectDefinition).Directives...)
+	}
+
+	if err := c.applyDirectives(&objectConfig, directiveDefs); err != nil {
 		return err
 	}
 

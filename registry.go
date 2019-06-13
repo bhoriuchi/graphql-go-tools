@@ -5,6 +5,7 @@ import (
 
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
+	"github.com/graphql-go/graphql/language/kinds"
 )
 
 // registry the registry holds all of the types
@@ -15,10 +16,11 @@ type registry struct {
 	resolverMap      *ResolverMap
 	directiveMap     *SchemaDirectiveVisitorMap
 	schemaDirectives []*ast.Directive
+	document         *ast.Document
 }
 
 // newRegistry creates a new registry
-func newRegistry(resolvers *ResolverMap, directives *SchemaDirectiveVisitorMap) *registry {
+func newRegistry(resolvers *ResolverMap, directives *SchemaDirectiveVisitorMap, document *ast.Document) *registry {
 	return &registry{
 		types: map[string]graphql.Type{
 			"ID":      graphql.ID,
@@ -35,6 +37,7 @@ func newRegistry(resolvers *ResolverMap, directives *SchemaDirectiveVisitorMap) 
 		resolverMap:      resolvers,
 		directiveMap:     directives,
 		schemaDirectives: []*ast.Directive{},
+		document:         document,
 	}
 }
 
@@ -95,4 +98,20 @@ func (c *registry) getDirective(name string) (*graphql.Directive, error) {
 // Set sets a graphql directive in the registry
 func (c *registry) setDirective(name string, graphqlDirective *graphql.Directive) {
 	c.directives[name] = graphqlDirective
+}
+
+// gets the extensions for the current type
+func (c *registry) getExtensions(name, kind string) []interface{} {
+	extensions := []interface{}{}
+
+	for _, def := range c.document.Definitions {
+		if def.GetKind() == kinds.TypeExtensionDefinition {
+			extDef := def.(*ast.TypeExtensionDefinition).Definition
+			if extDef.Name.Value == name && extDef.GetKind() == kind {
+				extensions = append(extensions, extDef)
+			}
+		}
+	}
+
+	return extensions
 }

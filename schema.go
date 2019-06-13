@@ -1,19 +1,27 @@
 package tools
 
 import (
-	"fmt"
-
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
 	"github.com/graphql-go/graphql/language/kinds"
-	"github.com/graphql-go/graphql/language/parser"
-	"github.com/graphql-go/graphql/language/source"
 )
 
-// MakeExecutableSchemaConfig configuration for making an executable schema
+// default root type names
+const (
+	DefaultRootQueryName        = "Query"
+	DefaultRootMutationName     = "Mutation"
+	DefaultRootSubscriptionName = "Subscription"
+)
+
+// MakeExecutableSchema is shorthand for ExecutableSchema{}.Make()
+func MakeExecutableSchema(config ExecutableSchema) (graphql.Schema, error) {
+	return config.Make()
+}
+
+// ExecutableSchema configuration for making an executable schema
 // this attempts to provide similar functionality to Apollo graphql-tools
 // https://www.apollographql.com/docs/graphql-tools/generate-schema
-type MakeExecutableSchemaConfig struct {
+type ExecutableSchema struct {
 	TypeDefs         interface{}
 	Types            *map[string]graphql.Type
 	Resolvers        *ResolverMap
@@ -21,28 +29,29 @@ type MakeExecutableSchemaConfig struct {
 	Directives       *DirectiveMap
 }
 
-// MakeExecutableSchema creates an executable graphql schema
-func MakeExecutableSchema(config MakeExecutableSchemaConfig) (graphql.Schema, error) {
-	registry := newRegistry(config.Resolvers, config.SchemaDirectives)
+// Make creates an executable graphql schema
+func (c *ExecutableSchema) Make() (graphql.Schema, error) {
+	// combine the TypeDefs
+	document, err := c.ConcatenateTypeDefs()
+	if err != nil {
+		return graphql.Schema{}, err
+	}
+
+	// create a new registry
+	registry := newRegistry(c.Resolvers, c.SchemaDirectives, document)
 
 	// add additional types to the registry
-	if config.Types != nil {
-		for name, t := range *config.Types {
+	if c.Types != nil {
+		for name, t := range *c.Types {
 			registry.setType(name, t)
 		}
 	}
 
 	// add additional directives to the registry
-	if config.Directives != nil {
-		for name, d := range *config.Directives {
+	if c.Directives != nil {
+		for name, d := range *c.Directives {
 			registry.setDirective(name, d)
 		}
-	}
-
-	// parse the TypeDefs
-	document, err := parseTypeDefs(config.TypeDefs)
-	if err != nil {
-		return graphql.Schema{}, err
 	}
 
 	// build types in order of possible dependencies
@@ -69,9 +78,9 @@ func MakeExecutableSchema(config MakeExecutableSchemaConfig) (graphql.Schema, er
 	}
 
 	// otherwise build a schema from default object names
-	query, _ := registry.getObject("Query")
-	mutation, _ := registry.getObject("Mutation")
-	subscription, _ := registry.getObject("Subscription")
+	query, _ := registry.getObject(DefaultRootQueryName)
+	mutation, _ := registry.getObject(DefaultRootMutationName)
+	subscription, _ := registry.getObject(DefaultRootSubscriptionName)
 
 	// create a new schema config
 	schemaConfig := graphql.SchemaConfig{
@@ -86,20 +95,6 @@ func MakeExecutableSchema(config MakeExecutableSchemaConfig) (graphql.Schema, er
 	return graphql.NewSchema(schemaConfig)
 }
 
-// parses the typedefs into an ast document
-func parseTypeDefs(typeDefs interface{}) (*ast.Document, error) {
-	switch typeDefs.(type) {
-	case string:
-		return parser.Parse(parser.ParseParams{
-			Source: &source.Source{
-				Body: []byte(typeDefs.(string)),
-				Name: "GraphQL",
-			},
-		})
-	}
-	return nil, fmt.Errorf("unsupported TypeDefs value")
-}
-
 // build a schema from an ast
 func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition) error {
 	schemaConfig := graphql.SchemaConfig{
@@ -110,19 +105,19 @@ func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition) error {
 	// add operations
 	for _, op := range definition.OperationTypes {
 		switch op.Operation {
-		case "query":
+		case ast.OperationTypeQuery:
 			if object, err := c.getObject(op.Type.Name.Value); err == nil {
 				schemaConfig.Query = object
 			} else {
 				return err
 			}
-		case "mutation":
+		case ast.OperationTypeMutation:
 			if object, err := c.getObject(op.Type.Name.Value); err == nil {
 				schemaConfig.Mutation = object
 			} else {
 				return err
 			}
-		case "subscription":
+		case ast.OperationTypeSubscription:
 			if object, err := c.getObject(op.Type.Name.Value); err == nil {
 				schemaConfig.Subscription = object
 			} else {

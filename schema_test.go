@@ -33,7 +33,7 @@ schema {
 	}
 
 	// make the schema
-	schema, err := MakeExecutableSchema(MakeExecutableSchemaConfig{
+	schema, err := MakeExecutableSchema(ExecutableSchema{
 		TypeDefs: typeDefs,
 		Resolvers: &ResolverMap{
 			"Query": &ObjectResolver{

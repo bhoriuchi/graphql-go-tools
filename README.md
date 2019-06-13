@@ -9,6 +9,25 @@ Like apollo-tools for graphql-go
 go get github.com/bhoriuchi/graphql-go-tools
 ```
 
+## Current Tools
+
+### `MakeExecutableSchema`
+
+**Currently supports:**
+
+  * Merge multiple graphql documents
+  * Object type extending
+  * Custom Directives
+  * Import types and directives
+
+**Planned:**
+
+  * Schema-stitching
+
+**Limitations:**
+
+  * Only types and directives defined in the `TypeDefs` with schema language can be extended and have custom directives applied.
+
 ## Example
 
 ```go

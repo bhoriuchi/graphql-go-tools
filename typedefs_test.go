@@ -10,7 +10,9 @@ import (
 func TestConcatenateTypeDefs(t *testing.T) {
 	config := ExecutableSchema{
 		TypeDefs: []string{
-			`type Foo {
+			`
+			# a foo
+			type Foo {
 				name: String!
 				description: String
 			}

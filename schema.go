@@ -27,6 +27,7 @@ type ExecutableSchema struct {
 	Resolvers        *ResolverMap
 	SchemaDirectives *SchemaDirectiveVisitorMap
 	Directives       *DirectiveMap
+	Extensions       []graphql.Extension
 }
 
 // Make creates an executable graphql schema
@@ -38,7 +39,7 @@ func (c *ExecutableSchema) Make() (graphql.Schema, error) {
 	}
 
 	// create a new registry
-	registry := newRegistry(c.Resolvers, c.SchemaDirectives, document)
+	registry := newRegistry(c.Resolvers, c.SchemaDirectives, document, c.Extensions)
 
 	// add additional types to the registry
 	if c.Types != nil {
@@ -89,6 +90,7 @@ func (c *ExecutableSchema) Make() (graphql.Schema, error) {
 		Subscription: subscription,
 		Types:        registry.typeArray(),
 		Directives:   registry.directiveArray(),
+		Extensions:   c.Extensions,
 	}
 
 	// create a new schema
@@ -100,6 +102,7 @@ func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition) error {
 	schemaConfig := graphql.SchemaConfig{
 		Types:      c.typeArray(),
 		Directives: c.directiveArray(),
+		Extensions: c.extensions,
 	}
 
 	// add operations

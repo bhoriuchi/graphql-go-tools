@@ -17,10 +17,16 @@ type registry struct {
 	directiveMap     *SchemaDirectiveVisitorMap
 	schemaDirectives []*ast.Directive
 	document         *ast.Document
+	extensions       []graphql.Extension
 }
 
 // newRegistry creates a new registry
-func newRegistry(resolvers *ResolverMap, directives *SchemaDirectiveVisitorMap, document *ast.Document) *registry {
+func newRegistry(
+	resolvers *ResolverMap,
+	directives *SchemaDirectiveVisitorMap,
+	document *ast.Document,
+	extensions []graphql.Extension,
+) *registry {
 	return &registry{
 		types: map[string]graphql.Type{
 			"ID":      graphql.ID,
@@ -38,6 +44,7 @@ func newRegistry(resolvers *ResolverMap, directives *SchemaDirectiveVisitorMap, 
 		directiveMap:     directives,
 		schemaDirectives: []*ast.Directive{},
 		document:         document,
+		extensions:       extensions,
 	}
 }
 

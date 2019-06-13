@@ -1,9 +1,8 @@
 package tools
 
 import (
-	"fmt"
-
 	"github.com/graphql-go/graphql"
+	"github.com/graphql-go/graphql/language/ast"
 	"github.com/graphql-go/graphql/language/kinds"
 	"github.com/graphql-go/graphql/language/parser"
 	"github.com/graphql-go/graphql/language/source"
@@ -13,7 +12,7 @@ import (
 // this attempts to provide similar functionality to Apollo graphql-tools
 // https://www.apollographql.com/docs/graphql-tools/generate-schema
 type MakeExecutableSchemaConfig struct {
-	TypeDefs         string
+	TypeDefs         interface{}
 	Types            *map[string]graphql.Type
 	Resolvers        *ResolverMap
 	SchemaDirectives *SchemaDirectiveVisitorMap
@@ -22,8 +21,7 @@ type MakeExecutableSchemaConfig struct {
 
 // MakeExecutableSchema creates an executable graphql schema
 func MakeExecutableSchema(config MakeExecutableSchemaConfig) (graphql.Schema, error) {
-	// create a registry with the resolver map
-	registry := newTypeRegistry(config.Resolvers, config.SchemaDirectives)
+	registry := newRegistry(config.Resolvers, config.SchemaDirectives)
 
 	// add additional types to the registry
 	if config.Types != nil {
@@ -40,9 +38,9 @@ func MakeExecutableSchema(config MakeExecutableSchemaConfig) (graphql.Schema, er
 	}
 
 	// parse the TypeDefs
-	astDocument, err := parser.Parse(parser.ParseParams{
+	document, err := parser.Parse(parser.ParseParams{
 		Source: &source.Source{
-			Body: []byte(config.TypeDefs),
+			Body: []byte(config.TypeDefs.(string)),
 			Name: "GraphQL",
 		},
 	})
@@ -51,55 +49,87 @@ func MakeExecutableSchema(config MakeExecutableSchemaConfig) (graphql.Schema, er
 	}
 
 	// build types in order of possible dependencies
-	if err := registry.buildTypesFromASTDocument(astDocument, kinds.DirectiveDefinition); err != nil {
-		return graphql.Schema{}, err
-	} else if err := registry.buildTypesFromASTDocument(astDocument, kinds.ScalarDefinition); err != nil {
-		return graphql.Schema{}, err
-	} else if err := registry.buildTypesFromASTDocument(astDocument, kinds.EnumDefinition); err != nil {
-		return graphql.Schema{}, err
-	} else if err := registry.buildTypesFromASTDocument(astDocument, kinds.InputObjectDefinition); err != nil {
-		return graphql.Schema{}, err
-	} else if err := registry.buildTypesFromASTDocument(astDocument, kinds.ObjectDefinition); err != nil {
-		return graphql.Schema{}, err
-	} else if err := registry.buildTypesFromASTDocument(astDocument, kinds.InterfaceDefinition); err != nil {
-		return graphql.Schema{}, err
-	} else if err := registry.buildTypesFromASTDocument(astDocument, kinds.UnionDefinition); err != nil {
-		return graphql.Schema{}, err
-	} else if err := registry.buildTypesFromASTDocument(astDocument, kinds.SchemaDefinition); err != nil {
-		return graphql.Schema{}, err
+	buildKinds := []string{
+		kinds.DirectiveDefinition,
+		kinds.ScalarDefinition,
+		kinds.EnumDefinition,
+		kinds.InputObjectDefinition,
+		kinds.ObjectDefinition,
+		kinds.InterfaceDefinition,
+		kinds.UnionDefinition,
+		kinds.SchemaDefinition,
 	}
 
-	// look for an object type with the name Query
-	rootQueryType, err := registry.getObject(registry.rootQueryName)
-	if err != nil {
-		return graphql.Schema{}, fmt.Errorf("root query object with name %q not found", registry.rootQueryName)
+	for _, kind := range buildKinds {
+		if err := registry.buildTypeFromDocument(document, kind); err != nil {
+			return graphql.Schema{}, err
+		}
 	}
 
-	// get other root resolvers types
-	mutation, err := registry.getObject(registry.rootMutationName)
-	if err != nil && registry.definedMutationName {
-		return graphql.Schema{}, fmt.Errorf("root mutation object with name %q not found", registry.rootMutationName)
+	// check if schema was created by definition
+	if registry.schema != nil {
+		return *registry.schema, nil
 	}
 
-	subscription, err := registry.getObject(registry.rootSubscriptionName)
-	if err != nil && registry.definedSubscriptionName {
-		return graphql.Schema{}, fmt.Errorf("root subscription object with name %q not found", registry.rootSubscriptionName)
-	}
+	// otherwise build a schema from default object names
+	query, _ := registry.getObject("Query")
+	mutation, _ := registry.getObject("Mutation")
+	subscription, _ := registry.getObject("Subscription")
 
 	// create a new schema config
 	schemaConfig := graphql.SchemaConfig{
-		Query:        rootQueryType,
+		Query:        query,
 		Mutation:     mutation,
 		Subscription: subscription,
 		Types:        registry.typeArray(),
 		Directives:   registry.directiveArray(),
 	}
 
-	// apply schema directives
-	if err := registry.applyDirectives(&schemaConfig, registry.schemaDirectives); err != nil {
-		return graphql.Schema{}, err
-	}
-
 	// create a new schema
 	return graphql.NewSchema(schemaConfig)
+}
+
+// build a schema from an ast
+func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition) error {
+	schemaConfig := graphql.SchemaConfig{
+		Types:      c.typeArray(),
+		Directives: c.directiveArray(),
+	}
+
+	// add operations
+	for _, op := range definition.OperationTypes {
+		switch op.Operation {
+		case "query":
+			if object, err := c.getObject(op.Type.Name.Value); err == nil {
+				schemaConfig.Query = object
+			} else {
+				return err
+			}
+		case "mutation":
+			if object, err := c.getObject(op.Type.Name.Value); err == nil {
+				schemaConfig.Mutation = object
+			} else {
+				return err
+			}
+		case "subscription":
+			if object, err := c.getObject(op.Type.Name.Value); err == nil {
+				schemaConfig.Subscription = object
+			} else {
+				return err
+			}
+		}
+	}
+
+	// apply schema directives
+	if err := c.applyDirectives(&schemaConfig, definition.Directives); err != nil {
+		return err
+	}
+
+	// build the schema
+	if schema, err := graphql.NewSchema(schemaConfig); err == nil {
+		c.schema = &schema
+	} else {
+		return err
+	}
+	return nil
 }

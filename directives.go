@@ -1,8 +1,6 @@
 package tools
 
 import (
-	"fmt"
-
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
 )
@@ -30,21 +28,8 @@ type SchemaDirectiveVisitorMap map[string]SchemaDirectiveVisitor
 // DirectiveMap a map of directives
 type DirectiveMap map[string]*graphql.Directive
 
-// Get gets a directive from the registry
-func (c *typeRegistry) getDirective(name string) (*graphql.Directive, error) {
-	if val, ok := c.directives[name]; ok {
-		return val, nil
-	}
-	return nil, fmt.Errorf("directive %q not found", name)
-}
-
-// Set sets a graphql directive in the registry
-func (c *typeRegistry) setDirective(name string, graphqlDirective *graphql.Directive) {
-	c.directives[name] = graphqlDirective
-}
-
 // converts the directive map to an array
-func (c *typeRegistry) directiveArray() []*graphql.Directive {
+func (c *registry) directiveArray() []*graphql.Directive {
 	a := make([]*graphql.Directive, 0)
 	for _, d := range c.directives {
 		a = append(a, d)
@@ -53,25 +38,23 @@ func (c *typeRegistry) directiveArray() []*graphql.Directive {
 }
 
 // builds directives from ast
-func (c *typeRegistry) buildDirectiveFromAST(definition *ast.DirectiveDefinition) error {
+func (c *registry) buildDirectiveFromAST(definition *ast.DirectiveDefinition) error {
 	name := definition.Name.Value
-
-	// build args
-
 	directiveConfig := graphql.DirectiveConfig{
 		Name:      name,
 		Args:      graphql.FieldConfigArgument{},
 		Locations: []string{},
 	}
+	if definition.Description != nil {
+		directiveConfig.Description = definition.Description.Value
+	}
 
 	// add args
 	for _, arg := range definition.Arguments {
-		if arg != nil {
-			a, err := c.buildArgFromAST(arg)
-			if err != nil {
-				return err
-			}
+		if a, err := c.buildArgFromAST(arg); err == nil {
 			directiveConfig.Args[arg.Name.Value] = a
+		} else {
+			return err
 		}
 	}
 
@@ -80,11 +63,60 @@ func (c *typeRegistry) buildDirectiveFromAST(definition *ast.DirectiveDefinition
 		directiveConfig.Locations = append(directiveConfig.Locations, loc.Value)
 	}
 
-	if definition.Description != nil {
-		directiveConfig.Description = definition.Description.Value
+	c.directives[name] = graphql.NewDirective(directiveConfig)
+
+	return nil
+}
+
+// applies directives
+func (c *registry) applyDirectives(target interface{}, directives []*ast.Directive) error {
+	if c.directiveMap == nil || directives == nil {
+		return nil
 	}
 
-	c.directives[name] = graphql.NewDirective(directiveConfig)
+	directiveMap := *c.directiveMap
+	for _, def := range directives {
+		name := def.Name.Value
+		visitor, hasVisitor := directiveMap[name]
+		if !hasVisitor {
+			continue
+		}
+
+		directive, err := c.getDirective(name)
+		if err != nil {
+			return err
+		}
+
+		args, err := getArgumentValues(directive.Args, def.Arguments, map[string]interface{}{})
+		if err != nil {
+			return err
+		}
+
+		switch target.(type) {
+		case *graphql.SchemaConfig:
+			visitor.VisitSchema(target.(*graphql.SchemaConfig), args)
+		case *graphql.ScalarConfig:
+			visitor.VisitScalar(target.(*graphql.ScalarConfig), args)
+		case *graphql.ObjectConfig:
+			visitor.VisitObject(target.(*graphql.ObjectConfig), args)
+		case *graphql.Field:
+			visitor.VisitFieldDefinition(target.(*graphql.Field), args)
+		case *graphql.ArgumentConfig:
+			visitor.VisitArgumentDefinition(target.(*graphql.ArgumentConfig), args)
+		case *graphql.InterfaceConfig:
+			visitor.VisitInterface(target.(*graphql.InterfaceConfig), args)
+		case *graphql.UnionConfig:
+			visitor.VisitUnion(target.(*graphql.UnionConfig), args)
+		case *graphql.EnumConfig:
+			visitor.VisitEnum(target.(*graphql.EnumConfig), args)
+		case *graphql.EnumValueConfig:
+			visitor.VisitEnumValue(target.(*graphql.EnumValueConfig), args)
+		case *graphql.InputObjectConfig:
+			visitor.VisitInputObject(target.(*graphql.InputObjectConfig), args)
+		case *graphql.InputObjectFieldConfig:
+			visitor.VisitInputFieldDefinition(target.(*graphql.InputObjectFieldConfig), args)
+		}
+	}
 
 	return nil
 }

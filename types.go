@@ -6,236 +6,86 @@ import (
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
 	"github.com/graphql-go/graphql/language/kinds"
-	"github.com/graphql-go/graphql/language/parser"
-	"github.com/graphql-go/graphql/language/source"
 )
 
-// Passes build info down
-type fieldInfo struct {
-	kind  string
-	name  string
-	field string
-}
-
-// typeRegistry the registry holds all of the types
-type typeRegistry struct {
-	types                   map[string]graphql.Type
-	directives              map[string]*graphql.Directive
-	resolverMap             *ResolverMap
-	directiveMap            *SchemaDirectiveVisitorMap
-	rootQueryName           string
-	rootMutationName        string
-	definedMutationName     bool
-	definedSubscriptionName bool
-	rootSubscriptionName    string
-	schemaDirectives        []*ast.Directive
-}
-
-// newTypeRegistry creates a new typeRegistry
-func newTypeRegistry(resolvers *ResolverMap, directives *SchemaDirectiveVisitorMap) *typeRegistry {
-	resolverMap := &ResolverMap{}
-	directiveMap := &SchemaDirectiveVisitorMap{}
-	if resolvers != nil {
-		resolverMap = resolvers
-	}
-	if directives != nil {
-		directiveMap = directives
-	}
-
-	return &typeRegistry{
-		types: map[string]graphql.Type{
-			"ID":      graphql.ID,
-			"String":  graphql.String,
-			"Int":     graphql.Int,
-			"Float":   graphql.Float,
-			"Boolean": graphql.Boolean,
-		},
-		directives: map[string]*graphql.Directive{
-			"include":    graphql.IncludeDirective,
-			"skip":       graphql.SkipDirective,
-			"deprecated": graphql.DeprecatedDirective,
-		},
-		resolverMap:          resolverMap,
-		directiveMap:         directiveMap,
-		rootQueryName:        "Query",
-		rootMutationName:     "Mutation",
-		rootSubscriptionName: "Subscription",
-		schemaDirectives:     []*ast.Directive{},
-	}
-}
-
-// gets an object from the registry
-func (c *typeRegistry) getObject(name string) (*graphql.Object, error) {
-	obj, err := c.getType(name)
-	if err != nil {
-		return nil, err
-	}
-	switch obj.(type) {
-	case *graphql.Object:
-		return obj.(*graphql.Object), nil
-	}
-	return nil, nil
-}
-
-// converts the type map to an array
-func (c *typeRegistry) typeArray() []graphql.Type {
-	a := make([]graphql.Type, 0)
-	for _, t := range c.types {
-		a = append(a, t)
-	}
-	return a
-}
-
 // gets the field resolve function for a field
-func (c *typeRegistry) getFieldResolveFn(info fieldInfo) graphql.FieldResolveFn {
-	rmap := *c.resolverMap
-
-	// validate that the type exists and it is the expected kind
-	if cfg, ok := rmap[info.name]; ok && info.kind == cfg.getKind() {
-		switch info.kind {
+func (c *registry) getFieldResolveFn(kind, typeName, fieldName string) graphql.FieldResolveFn {
+	if r := c.getResolver(typeName); r != nil && kind == r.GetKind() {
+		switch kind {
 		case kinds.ObjectDefinition:
-			if conf := cfg.getObject(); conf != nil {
-				if fn, ok := conf.Fields[info.field]; ok {
-					return fn
-				}
+			if fn, ok := r.(*ObjectResolver).Fields[fieldName]; ok {
+				return fn
 			}
 		case kinds.InterfaceDefinition:
-			if conf := cfg.getInterface(); conf != nil {
-				if fn, ok := conf.Fields[info.field]; ok {
-					return fn
-				}
+			if fn, ok := r.(*InterfaceResolver).Fields[fieldName]; ok {
+				return fn
 			}
 		}
 	}
 	return graphql.DefaultResolveFn
 }
 
-// Get gets a type from the registry
-func (c *typeRegistry) getType(name string) (graphql.Type, error) {
-	if val, ok := c.types[name]; ok {
-		return val, nil
-	}
-	return nil, fmt.Errorf("type %q not found", name)
-}
+// builds a specific type from
+func (c *registry) buildTypeFromDocument(document *ast.Document, buildKind string) error {
+	for _, definition := range document.Definitions {
+		nodeKind := definition.GetKind()
 
-// Set sets a graphql type in the registry
-func (c *typeRegistry) setType(name string, graphqlType graphql.Type) {
-	c.types[name] = graphqlType
-}
+		// skip types not currently interested in
+		if nodeKind != buildKind {
+			continue
+		}
 
-// BuildTypesFromBody parses body and builds types
-func (c *typeRegistry) buildTypesFromBody(body []byte) error {
-	// parse the schema definition
-	astDocument, parseErr := parser.Parse(parser.ParseParams{
-		Source: &source.Source{
-			Body: body,
-			Name: "GraphQL",
-		},
-	})
-	if parseErr != nil {
-		return parseErr
-	} else if err := c.buildTypesFromASTDocument(astDocument); err != nil {
-		return err
-	}
-	return nil
-}
-
-// BuildTypesFromAST builds types from an ast
-func (c *typeRegistry) buildTypesFromASTDocument(astValue *ast.Document, specific ...string) error {
-	// allow conditional building of types so that they can be staged
-	s := ""
-	if len(specific) > 0 {
-		s = specific[0]
-	}
-
-	for _, def := range astValue.Definitions {
-		switch kind := def.GetKind(); kind {
-		case kinds.SchemaDefinition:
-			if s == "" || s == kind {
-				schemaDef := def.(*ast.SchemaDefinition)
-				c.schemaDirectives = schemaDef.Directives
-
-				// get operations
-				for _, opType := range schemaDef.OperationTypes {
-					switch opType.Operation {
-					case "query":
-						c.rootQueryName = opType.Type.Name.Value
-					case "mutation":
-						c.rootMutationName = opType.Type.Name.Value
-						c.definedMutationName = true
-					case "subscription":
-						c.rootSubscriptionName = opType.Type.Name.Value
-						c.definedSubscriptionName = true
-					}
-				}
+		switch nodeKind {
+		case kinds.DirectiveDefinition:
+			if err := c.buildDirectiveFromAST(definition.(*ast.DirectiveDefinition)); err != nil {
+				return err
 			}
 		case kinds.ScalarDefinition:
-			if s == "" || s == kind {
-				if err := c.buildScalarFromAST(def.(*ast.ScalarDefinition)); err != nil {
-					return err
-				}
+			if err := c.buildScalarFromAST(definition.(*ast.ScalarDefinition)); err != nil {
+				return err
 			}
 		case kinds.EnumDefinition:
-			if s == "" || s == kind {
-				if err := c.buildEnumFromAST(def.(*ast.EnumDefinition)); err != nil {
-					return err
-				}
+			if err := c.buildEnumFromAST(definition.(*ast.EnumDefinition)); err != nil {
+				return err
 			}
 		case kinds.InputObjectDefinition:
-			if s == "" || s == kind {
-				if err := c.buildInputObjectFromAST(def.(*ast.InputObjectDefinition)); err != nil {
-					return err
-				}
-			}
-		case kinds.InterfaceDefinition:
-			if s == "" || s == kind {
-				if err := c.buildInterfaceFromAST(def.(*ast.InterfaceDefinition)); err != nil {
-					return err
-				}
-			}
-		case kinds.UnionDefinition:
-			if s == "" || s == kind {
-				if err := c.buildUnionFromAST(def.(*ast.UnionDefinition)); err != nil {
-					return err
-				}
+			if err := c.buildInputObjectFromAST(definition.(*ast.InputObjectDefinition)); err != nil {
+				return err
 			}
 		case kinds.ObjectDefinition:
-			if s == "" || s == kind {
-				if err := c.buildObjectFromAST(def.(*ast.ObjectDefinition)); err != nil {
-					return err
-				}
+			if err := c.buildObjectFromAST(definition.(*ast.ObjectDefinition)); err != nil {
+				return err
 			}
-		case kinds.DirectiveDefinition:
-			if s == "" || s == kind {
-				if err := c.buildDirectiveFromAST(def.(*ast.DirectiveDefinition)); err != nil {
-					return err
-				}
+		case kinds.InterfaceDefinition:
+			if err := c.buildInterfaceFromAST(definition.(*ast.InterfaceDefinition)); err != nil {
+				return err
+			}
+		case kinds.UnionDefinition:
+			if err := c.buildUnionFromAST(definition.(*ast.UnionDefinition)); err != nil {
+				return err
+			}
+		case kinds.SchemaDefinition:
+			if err := c.buildSchemaFromAST(definition.(*ast.SchemaDefinition)); err != nil {
+				return err
 			}
 		}
 	}
+
 	return nil
 }
 
 // builds a scalar from ast
-func (c *typeRegistry) buildScalarFromAST(definition *ast.ScalarDefinition) error {
+func (c *registry) buildScalarFromAST(definition *ast.ScalarDefinition) error {
 	name := definition.Name.Value
 	scalarConfig := graphql.ScalarConfig{
-		Name: name,
-	}
-	if definition.Description != nil {
-		scalarConfig.Description = definition.Description.Value
+		Name:        name,
+		Description: getDescription(definition),
 	}
 
-	// attempt to add scalar functions
-	if c.resolverMap != nil {
-		rmap := *c.resolverMap
-		if cfg, ok := rmap[name]; ok && cfg.getKind() == kinds.ScalarDefinition {
-			if r := cfg.getScalar(); r != nil {
-				scalarConfig.ParseLiteral = r.ParseLiteral
-				scalarConfig.ParseValue = r.ParseValue
-				scalarConfig.Serialize = r.Serialize
-			}
-		}
+	if r := c.getResolver(name); r != nil && r.GetKind() == kinds.ScalarDefinition {
+		scalarConfig.ParseLiteral = r.(*ScalarResolver).ParseLiteral
+		scalarConfig.ParseValue = r.(*ScalarResolver).ParseValue
+		scalarConfig.Serialize = r.(*ScalarResolver).Serialize
 	}
 
 	if err := c.applyDirectives(&scalarConfig, definition.Directives); err != nil {
@@ -247,14 +97,12 @@ func (c *typeRegistry) buildScalarFromAST(definition *ast.ScalarDefinition) erro
 }
 
 // builds an enum from ast
-func (c *typeRegistry) buildEnumFromAST(definition *ast.EnumDefinition) error {
+func (c *registry) buildEnumFromAST(definition *ast.EnumDefinition) error {
 	name := definition.Name.Value
 	enumConfig := graphql.EnumConfig{
-		Name:   name,
-		Values: graphql.EnumValueConfigMap{},
-	}
-	if definition.Description != nil {
-		enumConfig.Description = definition.Description.Value
+		Name:        name,
+		Description: getDescription(definition),
+		Values:      graphql.EnumValueConfigMap{},
 	}
 
 	// add values
@@ -277,42 +125,27 @@ func (c *typeRegistry) buildEnumFromAST(definition *ast.EnumDefinition) error {
 }
 
 // builds an interfacefrom ast
-func (c *typeRegistry) buildInterfaceFromAST(definition *ast.InterfaceDefinition) error {
+func (c *registry) buildInterfaceFromAST(definition *ast.InterfaceDefinition) error {
 	name := definition.Name.Value
-	var fieldsThunk graphql.FieldsThunk
-	fieldsThunk = func() graphql.Fields {
-		fields := make(graphql.Fields)
-		for _, f := range definition.Fields {
-			info := fieldInfo{
-				kind:  definition.GetKind(),
-				name:  name,
-				field: f.Name.Value,
-			}
-			field, err := c.buildFieldFromAST(f, info)
-			if err != nil {
+	var fieldsThunk graphql.FieldsThunk = func() graphql.Fields {
+		fields := graphql.Fields{}
+		for _, fieldDef := range definition.Fields {
+			if field, err := c.buildFieldFromAST(fieldDef, definition.GetKind(), name); err == nil {
+				fields[fieldDef.Name.Value] = field
+			} else {
 				return nil
 			}
-			fields[f.Name.Value] = field
 		}
 		return fields
 	}
-
 	ifaceConfig := graphql.InterfaceConfig{
-		Name:   name,
-		Fields: fieldsThunk,
-	}
-	if definition.Description != nil {
-		ifaceConfig.Description = definition.Description.Value
+		Name:        name,
+		Description: getDescription(definition),
+		Fields:      fieldsThunk,
 	}
 
-	// attempt to add resolveType function
-	if c.resolverMap != nil {
-		rmap := *c.resolverMap
-		if cfg, ok := rmap[name]; ok && cfg.getKind() == kinds.InterfaceDefinition {
-			if r := cfg.getInterface(); r != nil {
-				ifaceConfig.ResolveType = r.ResolveType
-			}
-		}
+	if r := c.getResolver(name); r != nil && r.GetKind() == kinds.InterfaceDefinition {
+		ifaceConfig.ResolveType = r.(*InterfaceResolver).ResolveType
 	}
 
 	if err := c.applyDirectives(&ifaceConfig, definition.Directives); err != nil {
@@ -324,7 +157,7 @@ func (c *typeRegistry) buildInterfaceFromAST(definition *ast.InterfaceDefinition
 }
 
 // builds a union from ast
-func (c *typeRegistry) buildUnionFromAST(definition *ast.UnionDefinition) error {
+func (c *registry) buildUnionFromAST(definition *ast.UnionDefinition) error {
 	name := definition.Name.Value
 	unionConfig := graphql.UnionConfig{
 		Name:  name,
@@ -358,28 +191,24 @@ func (c *typeRegistry) buildUnionFromAST(definition *ast.UnionDefinition) error 
 }
 
 // builds an input from ast
-func (c *typeRegistry) buildInputObjectFromAST(definition *ast.InputObjectDefinition) error {
+func (c *registry) buildInputObjectFromAST(definition *ast.InputObjectDefinition) error {
 	name := definition.Name.Value
-	var fieldsThunk graphql.InputObjectConfigFieldMapThunk
-	fieldsThunk = func() graphql.InputObjectConfigFieldMap {
-		fields := make(graphql.InputObjectConfigFieldMap)
-		for _, f := range definition.Fields {
-			field, err := c.buildInputObjectFieldFromAST(f)
-			if err != nil {
+	var fieldsThunk graphql.InputObjectConfigFieldMapThunk = func() graphql.InputObjectConfigFieldMap {
+		fields := graphql.InputObjectConfigFieldMap{}
+		for _, fieldDef := range definition.Fields {
+			if field, err := c.buildInputObjectFieldFromAST(fieldDef); err == nil {
+				fields[fieldDef.Name.Value] = field
+			} else {
 				return nil
 			}
-			fields[f.Name.Value] = field
 		}
 		return fields
 	}
 
 	inputConfig := graphql.InputObjectConfig{
-		Name:   name,
-		Fields: fieldsThunk,
-	}
-
-	if definition.Description != nil {
-		inputConfig.Description = definition.Description.Value
+		Name:        name,
+		Description: getDescription(definition),
+		Fields:      fieldsThunk,
 	}
 
 	if err := c.applyDirectives(&inputConfig, definition.Directives); err != nil {
@@ -391,19 +220,17 @@ func (c *typeRegistry) buildInputObjectFromAST(definition *ast.InputObjectDefini
 }
 
 // builds an input object field from an AST
-func (c *typeRegistry) buildInputObjectFieldFromAST(definition *ast.InputValueDefinition) (*graphql.InputObjectFieldConfig, error) {
+func (c *registry) buildInputObjectFieldFromAST(definition *ast.InputValueDefinition) (*graphql.InputObjectFieldConfig, error) {
 	t, err := c.buildComplexType(definition.Type)
 	if err != nil {
 		return nil, err
 	}
 
 	field := graphql.InputObjectFieldConfig{
-		Type: t,
+		Type:        t,
+		Description: getDescription(definition),
 	}
 
-	if definition.Description != nil {
-		field.Description = definition.Description.Value
-	}
 	if definition.DefaultValue != nil {
 		field.DefaultValue = definition.DefaultValue.GetValue()
 	}
@@ -416,49 +243,37 @@ func (c *typeRegistry) buildInputObjectFieldFromAST(definition *ast.InputValueDe
 }
 
 // builds an object from an AST
-func (c *typeRegistry) buildObjectFromAST(definition *ast.ObjectDefinition) error {
+func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition) error {
 	name := definition.Name.Value
-	var fieldsThunk graphql.FieldsThunk
-	fieldsThunk = func() graphql.Fields {
-		fields := make(graphql.Fields)
-		for _, f := range definition.Fields {
-			info := fieldInfo{
-				kind:  definition.GetKind(),
-				name:  name,
-				field: f.Name.Value,
-			}
-			field, err := c.buildFieldFromAST(f, info)
-			if err != nil {
+	var ifacesThunk graphql.InterfacesThunk = func() []*graphql.Interface {
+		ifaces := []*graphql.Interface{}
+		for _, ifaceDef := range definition.Interfaces {
+			if iface, err := c.getType(ifaceDef.Name.Value); err == nil {
+				ifaces = append(ifaces, iface.(*graphql.Interface))
+			} else {
 				return nil
 			}
-			fields[f.Name.Value] = field
+		}
+		return ifaces
+	}
+
+	var fieldsThunk graphql.FieldsThunk = func() graphql.Fields {
+		fields := graphql.Fields{}
+		for _, fieldDef := range definition.Fields {
+			if field, err := c.buildFieldFromAST(fieldDef, definition.GetKind(), name); err == nil {
+				fields[fieldDef.Name.Value] = field
+			} else {
+				return nil
+			}
 		}
 		return fields
 	}
 
 	objectConfig := graphql.ObjectConfig{
-		Name:   name,
-		Fields: fieldsThunk,
-	}
-
-	if definition.Description != nil {
-		objectConfig.Description = definition.Description.Value
-	}
-
-	if len(definition.Interfaces) > 0 {
-		var ifaceThunk graphql.InterfacesThunk
-		ifaceThunk = func() []*graphql.Interface {
-			ifaces := make([]*graphql.Interface, 0)
-			for _, idef := range definition.Interfaces {
-				iface, err := c.getType(idef.Name.Value)
-				if err != nil {
-					return nil
-				}
-				ifaces = append(ifaces, iface.(*graphql.Interface))
-			}
-			return ifaces
-		}
-		objectConfig.Interfaces = ifaceThunk
+		Name:        name,
+		Description: getDescription(definition),
+		Interfaces:  ifacesThunk,
+		Fields:      fieldsThunk,
 	}
 
 	if err := c.applyDirectives(&objectConfig, definition.Directives); err != nil {
@@ -470,7 +285,7 @@ func (c *typeRegistry) buildObjectFromAST(definition *ast.ObjectDefinition) erro
 }
 
 // Recursively builds a complex type
-func (c typeRegistry) buildComplexType(astType ast.Type) (graphql.Type, error) {
+func (c registry) buildComplexType(astType ast.Type) (graphql.Type, error) {
 	switch kind := astType.GetKind(); kind {
 	case kinds.List:
 		t, err := c.buildComplexType(astType.(*ast.List).Type)
@@ -485,36 +300,29 @@ func (c typeRegistry) buildComplexType(astType ast.Type) (graphql.Type, error) {
 			return nil, err
 		}
 		return graphql.NewNonNull(t), nil
+
 	case kinds.Named:
 		t := astType.(*ast.Named)
 		return c.getType(t.Name.Value)
 	}
+
 	return nil, fmt.Errorf("invalid kind")
 }
 
 // builds an enum value from an ast
-func (c *typeRegistry) buildEnumValueFromAST(definition *ast.EnumValueDefinition, enumName string) (*graphql.EnumValueConfig, error) {
+func (c *registry) buildEnumValueFromAST(definition *ast.EnumValueDefinition, enumName string) (*graphql.EnumValueConfig, error) {
 	var value interface{}
-	if c.resolverMap != nil {
-		rmap := *c.resolverMap
-		if cfg, ok := rmap[enumName]; ok && cfg.getKind() == kinds.EnumDefinition {
-			if r := cfg.getEnum(); r != nil {
-				if val, ok := r.Values[definition.Name.Value]; ok {
-					value = val
-				}
-			}
+	value = definition.Name.Value
+
+	if r := c.getResolver(enumName); r != nil && r.GetKind() == kinds.EnumDefinition {
+		if val, ok := r.(*EnumResolver).Values[definition.Name.Value]; ok {
+			value = val
 		}
 	}
 
-	if value == nil {
-		value = definition.Name.Value
-	}
-
 	valueConfig := graphql.EnumValueConfig{
-		Value: value,
-	}
-	if definition.Description != nil {
-		valueConfig.Description = definition.Description.Value
+		Value:       value,
+		Description: getDescription(definition),
 	}
 
 	if err := c.applyDirectives(&valueConfig, definition.Directives); err != nil {
@@ -525,17 +333,16 @@ func (c *typeRegistry) buildEnumValueFromAST(definition *ast.EnumValueDefinition
 }
 
 // builds an arg from an ast
-func (c *typeRegistry) buildArgFromAST(definition *ast.InputValueDefinition) (*graphql.ArgumentConfig, error) {
+func (c *registry) buildArgFromAST(definition *ast.InputValueDefinition) (*graphql.ArgumentConfig, error) {
 	t, err := c.buildComplexType(definition.Type)
 	if err != nil {
 		return nil, err
 	}
 	arg := graphql.ArgumentConfig{
-		Type: t,
+		Type:        t,
+		Description: getDescription(definition),
 	}
-	if definition.Description != nil {
-		arg.Description = definition.Description.Value
-	}
+
 	if definition.DefaultValue != nil {
 		arg.DefaultValue = definition.DefaultValue.GetValue()
 	}
@@ -548,17 +355,18 @@ func (c *typeRegistry) buildArgFromAST(definition *ast.InputValueDefinition) (*g
 }
 
 // builds a field from an ast
-func (c *typeRegistry) buildFieldFromAST(definition *ast.FieldDefinition, info fieldInfo) (*graphql.Field, error) {
+func (c *registry) buildFieldFromAST(definition *ast.FieldDefinition, kind, typeName string) (*graphql.Field, error) {
 	t, err := c.buildComplexType(definition.Type)
 	if err != nil {
 		return nil, err
 	}
 
 	field := graphql.Field{
-		Name:    definition.Name.Value,
-		Type:    t,
-		Args:    graphql.FieldConfigArgument{},
-		Resolve: c.getFieldResolveFn(info),
+		Name:        definition.Name.Value,
+		Description: getDescription(definition),
+		Type:        t,
+		Args:        graphql.FieldConfigArgument{},
+		Resolve:     c.getFieldResolveFn(kind, typeName, definition.Name.Value),
 	}
 
 	for _, arg := range definition.Arguments {
@@ -571,10 +379,6 @@ func (c *typeRegistry) buildFieldFromAST(definition *ast.FieldDefinition, info f
 		}
 	}
 
-	if definition.Description != nil {
-		field.Description = definition.Description.Value
-	}
-
 	if err := c.applyDirectives(&field, definition.Directives); err != nil {
 		return nil, err
 	}
@@ -582,55 +386,10 @@ func (c *typeRegistry) buildFieldFromAST(definition *ast.FieldDefinition, info f
 	return &field, nil
 }
 
-// applies directives
-func (c *typeRegistry) applyDirectives(target interface{}, directives []*ast.Directive) error {
-	if c.directiveMap == nil || directives == nil {
-		return nil
+// gets the description or defaults to an empty string
+func getDescription(node ast.DescribableNode) string {
+	if desc := node.GetDescription(); desc != nil {
+		return desc.Value
 	}
-
-	directiveMap := *c.directiveMap
-	for _, def := range directives {
-		name := def.Name.Value
-		visitor, hasVisitor := directiveMap[name]
-		if !hasVisitor {
-			continue
-		}
-
-		directive, err := c.getDirective(name)
-		if err != nil {
-			return err
-		}
-
-		args, err := getArgumentValues(directive.Args, def.Arguments, map[string]interface{}{})
-		if err != nil {
-			return err
-		}
-
-		switch target.(type) {
-		case *graphql.SchemaConfig:
-			visitor.VisitSchema(target.(*graphql.SchemaConfig), args)
-		case *graphql.ScalarConfig:
-			visitor.VisitScalar(target.(*graphql.ScalarConfig), args)
-		case *graphql.ObjectConfig:
-			visitor.VisitObject(target.(*graphql.ObjectConfig), args)
-		case *graphql.Field:
-			visitor.VisitFieldDefinition(target.(*graphql.Field), args)
-		case *graphql.ArgumentConfig:
-			visitor.VisitArgumentDefinition(target.(*graphql.ArgumentConfig), args)
-		case *graphql.InterfaceConfig:
-			visitor.VisitInterface(target.(*graphql.InterfaceConfig), args)
-		case *graphql.UnionConfig:
-			visitor.VisitUnion(target.(*graphql.UnionConfig), args)
-		case *graphql.EnumConfig:
-			visitor.VisitEnum(target.(*graphql.EnumConfig), args)
-		case *graphql.EnumValueConfig:
-			visitor.VisitEnumValue(target.(*graphql.EnumValueConfig), args)
-		case *graphql.InputObjectConfig:
-			visitor.VisitInputObject(target.(*graphql.InputObjectConfig), args)
-		case *graphql.InputObjectFieldConfig:
-			visitor.VisitInputFieldDefinition(target.(*graphql.InputObjectFieldConfig), args)
-		}
-	}
-
-	return nil
+	return ""
 }

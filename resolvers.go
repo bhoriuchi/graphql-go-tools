@@ -7,12 +7,7 @@ import (
 
 // Resolver interface to a resolver configuration
 type Resolver interface {
-	getKind() string
-	getObject() *ObjectResolver
-	getScalar() *ScalarResolver
-	getInterface() *InterfaceResolver
-	getUnion() *UnionResolver
-	getEnum() *EnumResolver
+	GetKind() string
 }
 
 // ResolverMap a map of resolver configurations
@@ -27,23 +22,9 @@ type ObjectResolver struct {
 	Fields   FieldResolveMap
 }
 
-func (c *ObjectResolver) getKind() string {
+// GetKind gets the kind
+func (c *ObjectResolver) GetKind() string {
 	return kinds.ObjectDefinition
-}
-func (c *ObjectResolver) getObject() *ObjectResolver {
-	return c
-}
-func (c *ObjectResolver) getScalar() *ScalarResolver {
-	return nil
-}
-func (c *ObjectResolver) getInterface() *InterfaceResolver {
-	return nil
-}
-func (c *ObjectResolver) getUnion() *UnionResolver {
-	return nil
-}
-func (c *ObjectResolver) getEnum() *EnumResolver {
-	return nil
 }
 
 // ScalarResolver config for a scalar resolve map
@@ -53,23 +34,9 @@ type ScalarResolver struct {
 	ParseLiteral graphql.ParseLiteralFn
 }
 
-func (c *ScalarResolver) getKind() string {
+// GetKind gets the kind
+func (c *ScalarResolver) GetKind() string {
 	return kinds.ScalarDefinition
-}
-func (c *ScalarResolver) getObject() *ObjectResolver {
-	return nil
-}
-func (c *ScalarResolver) getScalar() *ScalarResolver {
-	return c
-}
-func (c *ScalarResolver) getInterface() *InterfaceResolver {
-	return nil
-}
-func (c *ScalarResolver) getUnion() *UnionResolver {
-	return nil
-}
-func (c *ScalarResolver) getEnum() *EnumResolver {
-	return nil
 }
 
 // InterfaceResolver config for interface resolve
@@ -78,23 +45,9 @@ type InterfaceResolver struct {
 	Fields      FieldResolveMap
 }
 
-func (c *InterfaceResolver) getKind() string {
+// GetKind gets the kind
+func (c *InterfaceResolver) GetKind() string {
 	return kinds.InterfaceDefinition
-}
-func (c *InterfaceResolver) getObject() *ObjectResolver {
-	return nil
-}
-func (c *InterfaceResolver) getScalar() *ScalarResolver {
-	return nil
-}
-func (c *InterfaceResolver) getInterface() *InterfaceResolver {
-	return c
-}
-func (c *InterfaceResolver) getUnion() *UnionResolver {
-	return nil
-}
-func (c *InterfaceResolver) getEnum() *EnumResolver {
-	return nil
 }
 
 // UnionResolver config for interface resolve
@@ -102,23 +55,9 @@ type UnionResolver struct {
 	ResolveType graphql.ResolveTypeFn
 }
 
-func (c *UnionResolver) getKind() string {
+// GetKind gets the kind
+func (c *UnionResolver) GetKind() string {
 	return kinds.UnionDefinition
-}
-func (c *UnionResolver) getObject() *ObjectResolver {
-	return nil
-}
-func (c *UnionResolver) getScalar() *ScalarResolver {
-	return nil
-}
-func (c *UnionResolver) getInterface() *InterfaceResolver {
-	return nil
-}
-func (c *UnionResolver) getUnion() *UnionResolver {
-	return c
-}
-func (c *UnionResolver) getEnum() *EnumResolver {
-	return nil
 }
 
 // EnumResolver config for enum values
@@ -126,21 +65,7 @@ type EnumResolver struct {
 	Values map[string]interface{}
 }
 
-func (c *EnumResolver) getKind() string {
+// GetKind gets the kind
+func (c *EnumResolver) GetKind() string {
 	return kinds.EnumDefinition
-}
-func (c *EnumResolver) getObject() *ObjectResolver {
-	return nil
-}
-func (c *EnumResolver) getScalar() *ScalarResolver {
-	return nil
-}
-func (c *EnumResolver) getInterface() *InterfaceResolver {
-	return nil
-}
-func (c *EnumResolver) getUnion() *UnionResolver {
-	return nil
-}
-func (c *EnumResolver) getEnum() *EnumResolver {
-	return c
 }

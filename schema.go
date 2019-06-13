@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"fmt"
+
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
 	"github.com/graphql-go/graphql/language/kinds"
@@ -38,12 +40,7 @@ func MakeExecutableSchema(config MakeExecutableSchemaConfig) (graphql.Schema, er
 	}
 
 	// parse the TypeDefs
-	document, err := parser.Parse(parser.ParseParams{
-		Source: &source.Source{
-			Body: []byte(config.TypeDefs.(string)),
-			Name: "GraphQL",
-		},
-	})
+	document, err := parseTypeDefs(config.TypeDefs)
 	if err != nil {
 		return graphql.Schema{}, err
 	}
@@ -87,6 +84,20 @@ func MakeExecutableSchema(config MakeExecutableSchemaConfig) (graphql.Schema, er
 
 	// create a new schema
 	return graphql.NewSchema(schemaConfig)
+}
+
+// parses the typedefs into an ast document
+func parseTypeDefs(typeDefs interface{}) (*ast.Document, error) {
+	switch typeDefs.(type) {
+	case string:
+		return parser.Parse(parser.ParseParams{
+			Source: &source.Source{
+				Body: []byte(typeDefs.(string)),
+				Name: "GraphQL",
+			},
+		})
+	}
+	return nil, fmt.Errorf("unsupported TypeDefs value")
 }
 
 // build a schema from an ast

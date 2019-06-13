@@ -1,7 +1,7 @@
 # graphql-go-tools
 Like apollo-tools for graphql-go
 
-[![Documentation](https://godoc.org/github.com/bhoriuchi/go-graphql-tools?status.svg)](https://godoc.org/github.com/bhoriuchi/go-graphql-tools)
+[![Documentation](https://godoc.org/github.com/bhoriuchi/graphql-go-tools?status.svg)](https://godoc.org/github.com/bhoriuchi/graphql-go-tools)
 
 ## Getting Started
 

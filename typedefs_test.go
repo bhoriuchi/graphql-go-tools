@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/graphql-go/graphql"
@@ -10,6 +9,7 @@ import (
 func TestConcatenateTypeDefs(t *testing.T) {
 	config := ExecutableSchema{
 		TypeDefs: []string{
+			"type Query{}",
 			`
 			# a foo
 			type Foo {
@@ -17,7 +17,7 @@ func TestConcatenateTypeDefs(t *testing.T) {
 				description: String
 			}
 			
-			type Query {
+			extend type Query {
 				foo: Foo
 			}`,
 			`type Bar {
@@ -54,6 +54,4 @@ func TestConcatenateTypeDefs(t *testing.T) {
 		t.Error(r.Errors)
 		return
 	}
-
-	fmt.Println(r.Data)
 }

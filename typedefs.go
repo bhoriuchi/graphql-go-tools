@@ -43,7 +43,6 @@ func (c *ExecutableSchema) concatenateTypeDefs(typeDefs []string) (*ast.Document
 		for _, typeDef := range doc.Definitions {
 			if def := printer.Print(typeDef); def != nil {
 				stringDef := strings.TrimSpace(def.(string))
-				fmt.Println("DEF\n", stringDef)
 				resolvedTypes[stringDef] = nil
 			}
 		}

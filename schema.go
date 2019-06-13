@@ -132,10 +132,11 @@ func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition) error {
 	}
 
 	// build the schema
-	if schema, err := graphql.NewSchema(schemaConfig); err == nil {
-		c.schema = &schema
-	} else {
+	schema, err := graphql.NewSchema(schemaConfig)
+	if err != nil {
 		return err
 	}
+
+	c.schema = &schema
 	return nil
 }

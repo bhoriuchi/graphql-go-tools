@@ -9,17 +9,12 @@ import (
 
 // registry the registry holds all of the types
 type registry struct {
-	types                   map[string]graphql.Type
-	directives              map[string]*graphql.Directive
-	schema                  *graphql.Schema
-	resolverMap             *ResolverMap
-	directiveMap            *SchemaDirectiveVisitorMap
-	rootQueryName           string
-	rootMutationName        string
-	definedMutationName     bool
-	definedSubscriptionName bool
-	rootSubscriptionName    string
-	schemaDirectives        []*ast.Directive
+	types            map[string]graphql.Type
+	directives       map[string]*graphql.Directive
+	schema           *graphql.Schema
+	resolverMap      *ResolverMap
+	directiveMap     *SchemaDirectiveVisitorMap
+	schemaDirectives []*ast.Directive
 }
 
 // newRegistry creates a new registry
@@ -37,15 +32,13 @@ func newRegistry(resolvers *ResolverMap, directives *SchemaDirectiveVisitorMap) 
 			"skip":       graphql.SkipDirective,
 			"deprecated": graphql.DeprecatedDirective,
 		},
-		resolverMap:          resolvers,
-		directiveMap:         directives,
-		rootQueryName:        "Query",
-		rootMutationName:     "Mutation",
-		rootSubscriptionName: "Subscription",
-		schemaDirectives:     []*ast.Directive{},
+		resolverMap:      resolvers,
+		directiveMap:     directives,
+		schemaDirectives: []*ast.Directive{},
 	}
 }
 
+// looks up a resolver by name or returns nil
 func (c *registry) getResolver(name string) Resolver {
 	if c.resolverMap != nil {
 		resolverMap := *c.resolverMap

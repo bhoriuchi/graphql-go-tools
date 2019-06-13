@@ -8,29 +8,10 @@ import (
 	"github.com/graphql-go/graphql/language/kinds"
 )
 
-// gets the field resolve function for a field
-func (c *registry) getFieldResolveFn(kind, typeName, fieldName string) graphql.FieldResolveFn {
-	if r := c.getResolver(typeName); r != nil && kind == r.GetKind() {
-		switch kind {
-		case kinds.ObjectDefinition:
-			if fn, ok := r.(*ObjectResolver).Fields[fieldName]; ok {
-				return fn
-			}
-		case kinds.InterfaceDefinition:
-			if fn, ok := r.(*InterfaceResolver).Fields[fieldName]; ok {
-				return fn
-			}
-		}
-	}
-	return graphql.DefaultResolveFn
-}
-
-// builds a specific type from
+// builds a specific type from the document definitions
 func (c *registry) buildTypeFromDocument(document *ast.Document, buildKind string) error {
 	for _, definition := range document.Definitions {
 		nodeKind := definition.GetKind()
-
-		// skip types not currently interested in
 		if nodeKind != buildKind {
 			continue
 		}
@@ -82,7 +63,7 @@ func (c *registry) buildScalarFromAST(definition *ast.ScalarDefinition) error {
 		Description: getDescription(definition),
 	}
 
-	if r := c.getResolver(name); r != nil && r.GetKind() == kinds.ScalarDefinition {
+	if r := c.getResolver(name); r != nil && r.getKind() == kinds.ScalarDefinition {
 		scalarConfig.ParseLiteral = r.(*ScalarResolver).ParseLiteral
 		scalarConfig.ParseValue = r.(*ScalarResolver).ParseValue
 		scalarConfig.Serialize = r.(*ScalarResolver).Serialize
@@ -105,7 +86,6 @@ func (c *registry) buildEnumFromAST(definition *ast.EnumDefinition) error {
 		Values:      graphql.EnumValueConfigMap{},
 	}
 
-	// add values
 	for _, value := range definition.Values {
 		if value != nil {
 			val, err := c.buildEnumValueFromAST(value, name)
@@ -124,70 +104,27 @@ func (c *registry) buildEnumFromAST(definition *ast.EnumDefinition) error {
 	return nil
 }
 
-// builds an interfacefrom ast
-func (c *registry) buildInterfaceFromAST(definition *ast.InterfaceDefinition) error {
-	name := definition.Name.Value
-	var fieldsThunk graphql.FieldsThunk = func() graphql.Fields {
-		fields := graphql.Fields{}
-		for _, fieldDef := range definition.Fields {
-			if field, err := c.buildFieldFromAST(fieldDef, definition.GetKind(), name); err == nil {
-				fields[fieldDef.Name.Value] = field
-			} else {
-				return nil
-			}
+// builds an enum value from an ast
+func (c *registry) buildEnumValueFromAST(definition *ast.EnumValueDefinition, enumName string) (*graphql.EnumValueConfig, error) {
+	var value interface{}
+	value = definition.Name.Value
+
+	if r := c.getResolver(enumName); r != nil && r.getKind() == kinds.EnumDefinition {
+		if val, ok := r.(*EnumResolver).Values[definition.Name.Value]; ok {
+			value = val
 		}
-		return fields
 	}
-	ifaceConfig := graphql.InterfaceConfig{
-		Name:        name,
+
+	valueConfig := graphql.EnumValueConfig{
+		Value:       value,
 		Description: getDescription(definition),
-		Fields:      fieldsThunk,
 	}
 
-	if r := c.getResolver(name); r != nil && r.GetKind() == kinds.InterfaceDefinition {
-		ifaceConfig.ResolveType = r.(*InterfaceResolver).ResolveType
+	if err := c.applyDirectives(&valueConfig, definition.Directives); err != nil {
+		return nil, err
 	}
 
-	if err := c.applyDirectives(&ifaceConfig, definition.Directives); err != nil {
-		return err
-	}
-
-	c.types[name] = graphql.NewInterface(ifaceConfig)
-	return nil
-}
-
-// builds a union from ast
-func (c *registry) buildUnionFromAST(definition *ast.UnionDefinition) error {
-	name := definition.Name.Value
-	unionConfig := graphql.UnionConfig{
-		Name:  name,
-		Types: []*graphql.Object{},
-	}
-
-	// add types
-	for _, t := range definition.Types {
-		if t != nil {
-			object, err := c.getType(t.Name.Value)
-			if err != nil {
-				return err
-			}
-			if object != nil {
-				switch object.(type) {
-				case *graphql.Object:
-					unionConfig.Types = append(unionConfig.Types, object.(*graphql.Object))
-					continue
-				}
-			}
-			return fmt.Errorf("build Union failed: no Object type %q found", t.Name.Value)
-		}
-	}
-
-	if err := c.applyDirectives(&unionConfig, definition.Directives); err != nil {
-		return err
-	}
-
-	c.types[name] = graphql.NewUnion(unionConfig)
-	return nil
+	return &valueConfig, nil
 }
 
 // builds an input from ast
@@ -221,18 +158,15 @@ func (c *registry) buildInputObjectFromAST(definition *ast.InputObjectDefinition
 
 // builds an input object field from an AST
 func (c *registry) buildInputObjectFieldFromAST(definition *ast.InputValueDefinition) (*graphql.InputObjectFieldConfig, error) {
-	t, err := c.buildComplexType(definition.Type)
+	inputType, err := c.buildComplexType(definition.Type)
 	if err != nil {
 		return nil, err
 	}
 
 	field := graphql.InputObjectFieldConfig{
-		Type:        t,
-		Description: getDescription(definition),
-	}
-
-	if definition.DefaultValue != nil {
-		field.DefaultValue = definition.DefaultValue.GetValue()
+		Type:         inputType,
+		Description:  getDescription(definition),
+		DefaultValue: getDefaultValue(definition),
 	}
 
 	if err := c.applyDirectives(&field, definition.Directives); err != nil {
@@ -284,67 +218,48 @@ func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition) error {
 	return nil
 }
 
-// Recursively builds a complex type
-func (c registry) buildComplexType(astType ast.Type) (graphql.Type, error) {
-	switch kind := astType.GetKind(); kind {
-	case kinds.List:
-		t, err := c.buildComplexType(astType.(*ast.List).Type)
-		if err != nil {
-			return nil, err
+// builds an interfacefrom ast
+func (c *registry) buildInterfaceFromAST(definition *ast.InterfaceDefinition) error {
+	name := definition.Name.Value
+	var fieldsThunk graphql.FieldsThunk = func() graphql.Fields {
+		fields := graphql.Fields{}
+		for _, fieldDef := range definition.Fields {
+			if field, err := c.buildFieldFromAST(fieldDef, definition.GetKind(), name); err == nil {
+				fields[fieldDef.Name.Value] = field
+			} else {
+				return nil
+			}
 		}
-		return graphql.NewList(t), nil
-
-	case kinds.NonNull:
-		t, err := c.buildComplexType(astType.(*ast.NonNull).Type)
-		if err != nil {
-			return nil, err
-		}
-		return graphql.NewNonNull(t), nil
-
-	case kinds.Named:
-		t := astType.(*ast.Named)
-		return c.getType(t.Name.Value)
+		return fields
 	}
-
-	return nil, fmt.Errorf("invalid kind")
-}
-
-// builds an enum value from an ast
-func (c *registry) buildEnumValueFromAST(definition *ast.EnumValueDefinition, enumName string) (*graphql.EnumValueConfig, error) {
-	var value interface{}
-	value = definition.Name.Value
-
-	if r := c.getResolver(enumName); r != nil && r.GetKind() == kinds.EnumDefinition {
-		if val, ok := r.(*EnumResolver).Values[definition.Name.Value]; ok {
-			value = val
-		}
-	}
-
-	valueConfig := graphql.EnumValueConfig{
-		Value:       value,
+	ifaceConfig := graphql.InterfaceConfig{
+		Name:        name,
 		Description: getDescription(definition),
+		Fields:      fieldsThunk,
 	}
 
-	if err := c.applyDirectives(&valueConfig, definition.Directives); err != nil {
-		return nil, err
+	if r := c.getResolver(name); r != nil && r.getKind() == kinds.InterfaceDefinition {
+		ifaceConfig.ResolveType = r.(*InterfaceResolver).ResolveType
 	}
 
-	return &valueConfig, nil
+	if err := c.applyDirectives(&ifaceConfig, definition.Directives); err == nil {
+		return err
+	}
+
+	c.types[name] = graphql.NewInterface(ifaceConfig)
+	return nil
 }
 
 // builds an arg from an ast
 func (c *registry) buildArgFromAST(definition *ast.InputValueDefinition) (*graphql.ArgumentConfig, error) {
-	t, err := c.buildComplexType(definition.Type)
+	inputType, err := c.buildComplexType(definition.Type)
 	if err != nil {
 		return nil, err
 	}
 	arg := graphql.ArgumentConfig{
-		Type:        t,
-		Description: getDescription(definition),
-	}
-
-	if definition.DefaultValue != nil {
-		arg.DefaultValue = definition.DefaultValue.GetValue()
+		Type:         inputType,
+		Description:  getDescription(definition),
+		DefaultValue: getDefaultValue(definition),
 	}
 
 	if err := c.applyDirectives(&arg, definition.Directives); err != nil {
@@ -356,7 +271,7 @@ func (c *registry) buildArgFromAST(definition *ast.InputValueDefinition) (*graph
 
 // builds a field from an ast
 func (c *registry) buildFieldFromAST(definition *ast.FieldDefinition, kind, typeName string) (*graphql.Field, error) {
-	t, err := c.buildComplexType(definition.Type)
+	fieldType, err := c.buildComplexType(definition.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -364,18 +279,18 @@ func (c *registry) buildFieldFromAST(definition *ast.FieldDefinition, kind, type
 	field := graphql.Field{
 		Name:        definition.Name.Value,
 		Description: getDescription(definition),
-		Type:        t,
+		Type:        fieldType,
 		Args:        graphql.FieldConfigArgument{},
 		Resolve:     c.getFieldResolveFn(kind, typeName, definition.Name.Value),
 	}
 
 	for _, arg := range definition.Arguments {
 		if arg != nil {
-			a, err := c.buildArgFromAST(arg)
+			argValue, err := c.buildArgFromAST(arg)
 			if err != nil {
 				return nil, err
 			}
-			field.Args[arg.Name.Value] = a
+			field.Args[arg.Name.Value] = argValue
 		}
 	}
 
@@ -386,10 +301,35 @@ func (c *registry) buildFieldFromAST(definition *ast.FieldDefinition, kind, type
 	return &field, nil
 }
 
-// gets the description or defaults to an empty string
-func getDescription(node ast.DescribableNode) string {
-	if desc := node.GetDescription(); desc != nil {
-		return desc.Value
+// builds a union from ast
+func (c *registry) buildUnionFromAST(definition *ast.UnionDefinition) error {
+	name := definition.Name.Value
+	unionConfig := graphql.UnionConfig{
+		Name:        name,
+		Types:       []*graphql.Object{},
+		Description: getDescription(definition),
 	}
-	return ""
+
+	// add types
+	for _, unionType := range definition.Types {
+		object, err := c.getType(unionType.Name.Value)
+		if err != nil {
+			return err
+		}
+		if object != nil {
+			switch object.(type) {
+			case *graphql.Object:
+				unionConfig.Types = append(unionConfig.Types, object.(*graphql.Object))
+				continue
+			}
+		}
+		return fmt.Errorf("build Union failed: no Object type %q found", unionType.Name.Value)
+	}
+
+	if err := c.applyDirectives(&unionConfig, definition.Directives); err != nil {
+		return err
+	}
+
+	c.types[name] = graphql.NewUnion(unionConfig)
+	return nil
 }

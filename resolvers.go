@@ -7,7 +7,7 @@ import (
 
 // Resolver interface to a resolver configuration
 type Resolver interface {
-	GetKind() string
+	getKind() string
 }
 
 // ResolverMap a map of resolver configurations
@@ -23,7 +23,7 @@ type ObjectResolver struct {
 }
 
 // GetKind gets the kind
-func (c *ObjectResolver) GetKind() string {
+func (c *ObjectResolver) getKind() string {
 	return kinds.ObjectDefinition
 }
 
@@ -35,7 +35,7 @@ type ScalarResolver struct {
 }
 
 // GetKind gets the kind
-func (c *ScalarResolver) GetKind() string {
+func (c *ScalarResolver) getKind() string {
 	return kinds.ScalarDefinition
 }
 
@@ -46,7 +46,7 @@ type InterfaceResolver struct {
 }
 
 // GetKind gets the kind
-func (c *InterfaceResolver) GetKind() string {
+func (c *InterfaceResolver) getKind() string {
 	return kinds.InterfaceDefinition
 }
 
@@ -56,7 +56,7 @@ type UnionResolver struct {
 }
 
 // GetKind gets the kind
-func (c *UnionResolver) GetKind() string {
+func (c *UnionResolver) getKind() string {
 	return kinds.UnionDefinition
 }
 
@@ -66,6 +66,6 @@ type EnumResolver struct {
 }
 
 // GetKind gets the kind
-func (c *EnumResolver) GetKind() string {
+func (c *EnumResolver) getKind() string {
 	return kinds.EnumDefinition
 }

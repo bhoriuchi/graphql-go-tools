@@ -5,8 +5,8 @@ import (
 	"github.com/graphql-go/graphql/language/ast"
 )
 
-// SchemaDirectiveVisitor defines a schema visitor
-// this attempts to provide similar functionality to Apollo graphql-tools
+// SchemaDirectiveVisitor defines a schema visitor.
+// This attempts to provide similar functionality to Apollo graphql-tools
 // https://www.apollographql.com/docs/graphql-tools/schema-directives/
 type SchemaDirectiveVisitor struct {
 	VisitSchema               func(schema *graphql.SchemaConfig, args map[string]interface{})
@@ -41,36 +41,31 @@ func (c *registry) directiveArray() []*graphql.Directive {
 func (c *registry) buildDirectiveFromAST(definition *ast.DirectiveDefinition) error {
 	name := definition.Name.Value
 	directiveConfig := graphql.DirectiveConfig{
-		Name:      name,
-		Args:      graphql.FieldConfigArgument{},
-		Locations: []string{},
-	}
-	if definition.Description != nil {
-		directiveConfig.Description = definition.Description.Value
+		Name:        name,
+		Description: getDescription(definition),
+		Args:        graphql.FieldConfigArgument{},
+		Locations:   []string{},
 	}
 
-	// add args
 	for _, arg := range definition.Arguments {
-		if a, err := c.buildArgFromAST(arg); err == nil {
-			directiveConfig.Args[arg.Name.Value] = a
+		if argValue, err := c.buildArgFromAST(arg); err == nil {
+			directiveConfig.Args[arg.Name.Value] = argValue
 		} else {
 			return err
 		}
 	}
 
-	// add locations
 	for _, loc := range definition.Locations {
 		directiveConfig.Locations = append(directiveConfig.Locations, loc.Value)
 	}
 
 	c.directives[name] = graphql.NewDirective(directiveConfig)
-
 	return nil
 }
 
 // applies directives
-func (c *registry) applyDirectives(target interface{}, directives []*ast.Directive) error {
-	if c.directiveMap == nil || directives == nil {
+func (c *registry) applyDirectives(config interface{}, directives []*ast.Directive) error {
+	if c.directiveMap == nil {
 		return nil
 	}
 
@@ -92,29 +87,29 @@ func (c *registry) applyDirectives(target interface{}, directives []*ast.Directi
 			return err
 		}
 
-		switch target.(type) {
+		switch config.(type) {
 		case *graphql.SchemaConfig:
-			visitor.VisitSchema(target.(*graphql.SchemaConfig), args)
+			visitor.VisitSchema(config.(*graphql.SchemaConfig), args)
 		case *graphql.ScalarConfig:
-			visitor.VisitScalar(target.(*graphql.ScalarConfig), args)
+			visitor.VisitScalar(config.(*graphql.ScalarConfig), args)
 		case *graphql.ObjectConfig:
-			visitor.VisitObject(target.(*graphql.ObjectConfig), args)
+			visitor.VisitObject(config.(*graphql.ObjectConfig), args)
 		case *graphql.Field:
-			visitor.VisitFieldDefinition(target.(*graphql.Field), args)
+			visitor.VisitFieldDefinition(config.(*graphql.Field), args)
 		case *graphql.ArgumentConfig:
-			visitor.VisitArgumentDefinition(target.(*graphql.ArgumentConfig), args)
+			visitor.VisitArgumentDefinition(config.(*graphql.ArgumentConfig), args)
 		case *graphql.InterfaceConfig:
-			visitor.VisitInterface(target.(*graphql.InterfaceConfig), args)
+			visitor.VisitInterface(config.(*graphql.InterfaceConfig), args)
 		case *graphql.UnionConfig:
-			visitor.VisitUnion(target.(*graphql.UnionConfig), args)
+			visitor.VisitUnion(config.(*graphql.UnionConfig), args)
 		case *graphql.EnumConfig:
-			visitor.VisitEnum(target.(*graphql.EnumConfig), args)
+			visitor.VisitEnum(config.(*graphql.EnumConfig), args)
 		case *graphql.EnumValueConfig:
-			visitor.VisitEnumValue(target.(*graphql.EnumValueConfig), args)
+			visitor.VisitEnumValue(config.(*graphql.EnumValueConfig), args)
 		case *graphql.InputObjectConfig:
-			visitor.VisitInputObject(target.(*graphql.InputObjectConfig), args)
+			visitor.VisitInputObject(config.(*graphql.InputObjectConfig), args)
 		case *graphql.InputObjectFieldConfig:
-			visitor.VisitInputFieldDefinition(target.(*graphql.InputObjectFieldConfig), args)
+			visitor.VisitInputFieldDefinition(config.(*graphql.InputObjectFieldConfig), args)
 		}
 	}
 

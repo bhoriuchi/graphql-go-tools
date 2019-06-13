@@ -23,7 +23,7 @@ import (
 )
 
 func main() {
-  schema, err := tools.MakeExecutableSchema(tools.MakeExecutableSchemaConfig{
+  schema, err := tools.MakeExecutableSchema(tools.ExecutableSchema{
     TypeDefs: `
     directive @description(value: String!) on FIELD_DEFINITION
 
@@ -83,7 +83,7 @@ func main() {
 		log.Fatalf("failed to execute graphql operation, errors: %+v", r.Errors)
 	}
 	rJSON, _ := json.Marshal(r)
-	fmt.Printf("%s \n", rJSON) // {“data”:{“description”:”bazqux”}}
+	fmt.Printf("%s \n", rJSON)
 }
 
 ```

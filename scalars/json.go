@@ -34,30 +34,30 @@ var ScalarJSONResolver = &tools.ScalarResolver{
 	ParseLiteral: parseLiteral,
 }
 
+// recursively parse ast
 func parseLiteral(astValue ast.Value) interface{} {
-	kind := astValue.GetKind()
+	switch kind := astValue.GetKind(); kind {
+	// get value for primitive types
+	case kinds.StringValue, kinds.BooleanValue, kinds.IntValue, kinds.FloatValue:
+		return astValue.GetValue()
 
-	switch kind {
-	case kinds.StringValue:
-		return astValue.GetValue()
-	case kinds.BooleanValue:
-		return astValue.GetValue()
-	case kinds.IntValue:
-		return astValue.GetValue()
-	case kinds.FloatValue:
-		return astValue.GetValue()
+	// make a map for objects
 	case kinds.ObjectValue:
 		obj := make(map[string]interface{})
 		for _, v := range astValue.GetValue().([]*ast.ObjectField) {
 			obj[v.Name.Value] = parseLiteral(v.Value)
 		}
 		return obj
+
+	// make a slice for lists
 	case kinds.ListValue:
 		list := make([]interface{}, 0)
 		for _, v := range astValue.GetValue().([]ast.Value) {
 			list = append(list, parseLiteral(v))
 		}
 		return list
+
+	// default to nil
 	default:
 		return nil
 	}

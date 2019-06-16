@@ -8,55 +8,8 @@ import (
 	"github.com/graphql-go/graphql/language/kinds"
 )
 
-// builds a specific type from the document definitions
-func (c *registry) buildTypeFromDocument(document *ast.Document, buildKind string) error {
-	for _, definition := range document.Definitions {
-		nodeKind := definition.GetKind()
-		if nodeKind != buildKind {
-			continue
-		}
-
-		switch nodeKind {
-		case kinds.DirectiveDefinition:
-			if err := c.buildDirectiveFromAST(definition.(*ast.DirectiveDefinition)); err != nil {
-				return err
-			}
-		case kinds.ScalarDefinition:
-			if err := c.buildScalarFromAST(definition.(*ast.ScalarDefinition)); err != nil {
-				return err
-			}
-		case kinds.EnumDefinition:
-			if err := c.buildEnumFromAST(definition.(*ast.EnumDefinition)); err != nil {
-				return err
-			}
-		case kinds.InputObjectDefinition:
-			if err := c.buildInputObjectFromAST(definition.(*ast.InputObjectDefinition)); err != nil {
-				return err
-			}
-		case kinds.ObjectDefinition:
-			if err := c.buildObjectFromAST(definition.(*ast.ObjectDefinition)); err != nil {
-				return err
-			}
-		case kinds.InterfaceDefinition:
-			if err := c.buildInterfaceFromAST(definition.(*ast.InterfaceDefinition)); err != nil {
-				return err
-			}
-		case kinds.UnionDefinition:
-			if err := c.buildUnionFromAST(definition.(*ast.UnionDefinition)); err != nil {
-				return err
-			}
-		case kinds.SchemaDefinition:
-			if err := c.buildSchemaFromAST(definition.(*ast.SchemaDefinition)); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
 // builds a scalar from ast
-func (c *registry) buildScalarFromAST(definition *ast.ScalarDefinition) error {
+func (c *registry) buildScalarFromAST(definition *ast.ScalarDefinition, allowThunks bool) error {
 	name := definition.Name.Value
 	scalarConfig := graphql.ScalarConfig{
 		Name:        name,
@@ -69,7 +22,7 @@ func (c *registry) buildScalarFromAST(definition *ast.ScalarDefinition) error {
 		scalarConfig.Serialize = r.(*ScalarResolver).Serialize
 	}
 
-	if err := c.applyDirectives(&scalarConfig, definition.Directives); err != nil {
+	if err := c.applyDirectives(&scalarConfig, definition.Directives, allowThunks); err != nil {
 		return err
 	}
 
@@ -78,7 +31,7 @@ func (c *registry) buildScalarFromAST(definition *ast.ScalarDefinition) error {
 }
 
 // builds an enum from ast
-func (c *registry) buildEnumFromAST(definition *ast.EnumDefinition) error {
+func (c *registry) buildEnumFromAST(definition *ast.EnumDefinition, allowThunks bool) error {
 	name := definition.Name.Value
 	enumConfig := graphql.EnumConfig{
 		Name:        name,
@@ -88,7 +41,7 @@ func (c *registry) buildEnumFromAST(definition *ast.EnumDefinition) error {
 
 	for _, value := range definition.Values {
 		if value != nil {
-			val, err := c.buildEnumValueFromAST(value, name)
+			val, err := c.buildEnumValueFromAST(value, name, allowThunks)
 			if err != nil {
 				return err
 			}
@@ -96,7 +49,7 @@ func (c *registry) buildEnumFromAST(definition *ast.EnumDefinition) error {
 		}
 	}
 
-	if err := c.applyDirectives(&enumConfig, definition.Directives); err != nil {
+	if err := c.applyDirectives(&enumConfig, definition.Directives, allowThunks); err != nil {
 		return err
 	}
 
@@ -105,7 +58,7 @@ func (c *registry) buildEnumFromAST(definition *ast.EnumDefinition) error {
 }
 
 // builds an enum value from an ast
-func (c *registry) buildEnumValueFromAST(definition *ast.EnumValueDefinition, enumName string) (*graphql.EnumValueConfig, error) {
+func (c *registry) buildEnumValueFromAST(definition *ast.EnumValueDefinition, enumName string, allowThunks bool) (*graphql.EnumValueConfig, error) {
 	var value interface{}
 	value = definition.Name.Value
 
@@ -120,7 +73,7 @@ func (c *registry) buildEnumValueFromAST(definition *ast.EnumValueDefinition, en
 		Description: getDescription(definition),
 	}
 
-	if err := c.applyDirectives(&valueConfig, definition.Directives); err != nil {
+	if err := c.applyDirectives(&valueConfig, definition.Directives, allowThunks); err != nil {
 		return nil, err
 	}
 
@@ -128,27 +81,34 @@ func (c *registry) buildEnumValueFromAST(definition *ast.EnumValueDefinition, en
 }
 
 // builds an input from ast
-func (c *registry) buildInputObjectFromAST(definition *ast.InputObjectDefinition) error {
+func (c *registry) buildInputObjectFromAST(definition *ast.InputObjectDefinition, allowThunks bool) error {
+	var fields interface{}
 	name := definition.Name.Value
-	var fieldsThunk graphql.InputObjectConfigFieldMapThunk = func() graphql.InputObjectConfigFieldMap {
-		fields := graphql.InputObjectConfigFieldMap{}
-		for _, fieldDef := range definition.Fields {
-			if field, err := c.buildInputObjectFieldFromAST(fieldDef); err == nil {
-				fields[fieldDef.Name.Value] = field
-			} else {
+
+	// use thunks only when allowed
+	if allowThunks {
+		fields = func() graphql.InputObjectConfigFieldMap {
+			fieldMap, err := c.buildInputObjectFieldMapFromAST(definition.Fields, allowThunks)
+			if err != nil {
 				return nil
 			}
+			return fieldMap
 		}
-		return fields
+	} else {
+		fieldMap, err := c.buildInputObjectFieldMapFromAST(definition.Fields, allowThunks)
+		if err != nil {
+			return err
+		}
+		fields = fieldMap
 	}
 
 	inputConfig := graphql.InputObjectConfig{
 		Name:        name,
 		Description: getDescription(definition),
-		Fields:      fieldsThunk,
+		Fields:      fields,
 	}
 
-	if err := c.applyDirectives(&inputConfig, definition.Directives); err != nil {
+	if err := c.applyDirectives(&inputConfig, definition.Directives, allowThunks); err != nil {
 		return err
 	}
 
@@ -156,8 +116,21 @@ func (c *registry) buildInputObjectFromAST(definition *ast.InputObjectDefinition
 	return nil
 }
 
+// builds an input object field map from ast
+func (c *registry) buildInputObjectFieldMapFromAST(fields []*ast.InputValueDefinition, allowThunks bool) (graphql.InputObjectConfigFieldMap, error) {
+	fieldMap := graphql.InputObjectConfigFieldMap{}
+	for _, fieldDef := range fields {
+		field, err := c.buildInputObjectFieldFromAST(fieldDef, allowThunks)
+		if err != nil {
+			return nil, err
+		}
+		fieldMap[fieldDef.Name.Value] = field
+	}
+	return fieldMap, nil
+}
+
 // builds an input object field from an AST
-func (c *registry) buildInputObjectFieldFromAST(definition *ast.InputValueDefinition) (*graphql.InputObjectFieldConfig, error) {
+func (c *registry) buildInputObjectFieldFromAST(definition *ast.InputValueDefinition, allowThunks bool) (*graphql.InputObjectFieldConfig, error) {
 	inputType, err := c.buildComplexType(definition.Type)
 	if err != nil {
 		return nil, err
@@ -169,7 +142,7 @@ func (c *registry) buildInputObjectFieldFromAST(definition *ast.InputValueDefini
 		DefaultValue: getDefaultValue(definition),
 	}
 
-	if err := c.applyDirectives(&field, definition.Directives); err != nil {
+	if err := c.applyDirectives(&field, definition.Directives, allowThunks); err != nil {
 		return nil, err
 	}
 
@@ -177,71 +150,51 @@ func (c *registry) buildInputObjectFieldFromAST(definition *ast.InputValueDefini
 }
 
 // builds an object from an AST
-func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition) error {
+func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition, allowThunks bool) error {
+	var ifaces interface{}
+	var fields interface{}
 	name := definition.Name.Value
 	extensions := c.getExtensions(name, definition.GetKind())
 
-	var ifacesThunk graphql.InterfacesThunk = func() []*graphql.Interface {
-		imap := map[string]bool{}
-		ifaces := []*graphql.Interface{}
-
-		// build list of interfaces and append extensions
-		ifaceDefs := append([]*ast.Named{}, definition.Interfaces...)
-		for _, extDef := range extensions {
-			ifaceDefs = append(ifaceDefs, extDef.(*ast.ObjectDefinition).Interfaces...)
-		}
-
-		// add defined interfaces
-		for _, ifaceDef := range ifaceDefs {
-			if _, ok := imap[ifaceDef.Name.Value]; !ok {
-				if iface, err := c.getType(ifaceDef.Name.Value); err == nil {
-					ifaces = append(ifaces, iface.(*graphql.Interface))
-					imap[ifaceDef.Name.Value] = true
-				} else {
-					// TODO: add warning here somehow
-					continue
-				}
-			} else {
-				// TODO: add warning here somehow
+	if allowThunks {
+		// get interfaces thunk
+		ifaces = func() []*graphql.Interface {
+			ifaceArr, err := c.buildInterfacesArrayFromAST(definition, extensions, allowThunks)
+			if err != nil {
+				return nil
 			}
+			return ifaceArr
 		}
 
-		return ifaces
-	}
-
-	var fieldsThunk graphql.FieldsThunk = func() graphql.Fields {
-		fmap := map[string]bool{}
-		fields := graphql.Fields{}
-
-		// build list of fields and append extensions
-		fieldDefs := append([]*ast.FieldDefinition{}, definition.Fields...)
-		for _, extDef := range extensions {
-			fieldDefs = append(fieldDefs, extDef.(*ast.ObjectDefinition).Fields...)
-		}
-
-		// add defined fields
-		for _, fieldDef := range fieldDefs {
-			if _, ok := fmap[fieldDef.Name.Value]; !ok {
-				if field, err := c.buildFieldFromAST(fieldDef, definition.GetKind(), name); err == nil {
-					fields[fieldDef.Name.Value] = field
-					fmap[fieldDef.Name.Value] = true
-				} else {
-					// TODO: add warning here somehow
-					continue
-				}
-			} else {
-				// TODO: add warning here somehow
+		// get fields thunk
+		fields = func() graphql.Fields {
+			fieldMap, err := c.buildFieldMapFromAST(definition.Fields, definition.GetKind(), name, extensions, allowThunks)
+			if err != nil {
+				return nil
 			}
+			return fieldMap
 		}
+	} else {
+		// get interfaces
+		ifaceArr, err := c.buildInterfacesArrayFromAST(definition, extensions, allowThunks)
+		if err != nil {
+			return err
+		}
+		ifaces = ifaceArr
 
-		return fields
+		// get fields
+		fieldMap, err := c.buildFieldMapFromAST(definition.Fields, definition.GetKind(), name, extensions, allowThunks)
+		if err != nil {
+			return err
+		}
+		fields = fieldMap
 	}
 
 	objectConfig := graphql.ObjectConfig{
 		Name:        name,
 		Description: getDescription(definition),
-		Interfaces:  ifacesThunk,
-		Fields:      fieldsThunk,
+		Interfaces:  ifaces,
+		Fields:      fields,
 	}
 
 	// update description from extensions if none
@@ -258,7 +211,7 @@ func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition) error {
 		directiveDefs = append(directiveDefs, extDef.(*ast.ObjectDefinition).Directives...)
 	}
 
-	if err := c.applyDirectives(&objectConfig, directiveDefs); err != nil {
+	if err := c.applyDirectives(&objectConfig, directiveDefs, allowThunks); err != nil {
 		return err
 	}
 
@@ -266,31 +219,87 @@ func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition) error {
 	return nil
 }
 
-// builds an interfacefrom ast
-func (c *registry) buildInterfaceFromAST(definition *ast.InterfaceDefinition) error {
-	name := definition.Name.Value
-	var fieldsThunk graphql.FieldsThunk = func() graphql.Fields {
-		fields := graphql.Fields{}
-		for _, fieldDef := range definition.Fields {
-			if field, err := c.buildFieldFromAST(fieldDef, definition.GetKind(), name); err == nil {
-				fields[fieldDef.Name.Value] = field
+func (c *registry) buildInterfacesArrayFromAST(definition *ast.ObjectDefinition, extensions []interface{}, allowThunks bool) ([]*graphql.Interface, error) {
+	imap := map[string]bool{}
+	ifaces := []*graphql.Interface{}
+
+	// build list of interfaces and append extensions
+	ifaceDefs := append([]*ast.Named{}, definition.Interfaces...)
+	for _, extDef := range extensions {
+		ifaceDefs = append(ifaceDefs, extDef.(*ast.ObjectDefinition).Interfaces...)
+	}
+
+	// add defined interfaces
+	for _, ifaceDef := range ifaceDefs {
+		if _, ok := imap[ifaceDef.Name.Value]; !ok {
+			iface, err := c.getType(ifaceDef.Name.Value)
+			if err != nil {
+				return nil, err
+			}
+			ifaces = append(ifaces, iface.(*graphql.Interface))
+			imap[ifaceDef.Name.Value] = true
+		}
+	}
+
+	return ifaces, nil
+}
+
+func (c *registry) buildFieldMapFromAST(fields []*ast.FieldDefinition, kind, typeName string, extensions []interface{}, allowThunks bool) (graphql.Fields, error) {
+	fieldMap := graphql.Fields{}
+
+	// build list of fields and append extensions
+	fieldDefs := append([]*ast.FieldDefinition{}, fields...)
+	for _, extDef := range extensions {
+		fieldDefs = append(fieldDefs, extDef.(*ast.ObjectDefinition).Fields...)
+	}
+
+	// add defined fields
+	for _, fieldDef := range fieldDefs {
+		if _, ok := fieldMap[fieldDef.Name.Value]; !ok {
+			if field, err := c.buildFieldFromAST(fieldDef, kind, typeName, allowThunks); err == nil {
+				fieldMap[fieldDef.Name.Value] = field
 			} else {
-				return nil
+				return nil, err
 			}
 		}
-		return fields
 	}
+
+	return fieldMap, nil
+}
+
+// builds an interfacefrom ast
+func (c *registry) buildInterfaceFromAST(definition *ast.InterfaceDefinition, allowThunks bool) error {
+	var fields interface{}
+	extensions := []interface{}{}
+	name := definition.Name.Value
+
+	if allowThunks {
+		fields = func() graphql.Fields {
+			fieldMap, err := c.buildFieldMapFromAST(definition.Fields, definition.GetKind(), name, extensions, allowThunks)
+			if err != nil {
+				return nil
+			}
+			return fieldMap
+		}
+	} else {
+		fieldMap, err := c.buildFieldMapFromAST(definition.Fields, definition.GetKind(), name, extensions, allowThunks)
+		if err != nil {
+			return err
+		}
+		fields = fieldMap
+	}
+
 	ifaceConfig := graphql.InterfaceConfig{
 		Name:        name,
 		Description: getDescription(definition),
-		Fields:      fieldsThunk,
+		Fields:      fields,
 	}
 
 	if r := c.getResolver(name); r != nil && r.getKind() == kinds.InterfaceDefinition {
 		ifaceConfig.ResolveType = r.(*InterfaceResolver).ResolveType
 	}
 
-	if err := c.applyDirectives(&ifaceConfig, definition.Directives); err == nil {
+	if err := c.applyDirectives(&ifaceConfig, definition.Directives, allowThunks); err == nil {
 		return err
 	}
 
@@ -299,7 +308,7 @@ func (c *registry) buildInterfaceFromAST(definition *ast.InterfaceDefinition) er
 }
 
 // builds an arg from an ast
-func (c *registry) buildArgFromAST(definition *ast.InputValueDefinition) (*graphql.ArgumentConfig, error) {
+func (c *registry) buildArgFromAST(definition *ast.InputValueDefinition, allowThunks bool) (*graphql.ArgumentConfig, error) {
 	inputType, err := c.buildComplexType(definition.Type)
 	if err != nil {
 		return nil, err
@@ -310,7 +319,7 @@ func (c *registry) buildArgFromAST(definition *ast.InputValueDefinition) (*graph
 		DefaultValue: getDefaultValue(definition),
 	}
 
-	if err := c.applyDirectives(&arg, definition.Directives); err != nil {
+	if err := c.applyDirectives(&arg, definition.Directives, allowThunks); err != nil {
 		return nil, err
 	}
 
@@ -318,7 +327,7 @@ func (c *registry) buildArgFromAST(definition *ast.InputValueDefinition) (*graph
 }
 
 // builds a field from an ast
-func (c *registry) buildFieldFromAST(definition *ast.FieldDefinition, kind, typeName string) (*graphql.Field, error) {
+func (c *registry) buildFieldFromAST(definition *ast.FieldDefinition, kind, typeName string, allowThunks bool) (*graphql.Field, error) {
 	fieldType, err := c.buildComplexType(definition.Type)
 	if err != nil {
 		return nil, err
@@ -334,7 +343,7 @@ func (c *registry) buildFieldFromAST(definition *ast.FieldDefinition, kind, type
 
 	for _, arg := range definition.Arguments {
 		if arg != nil {
-			argValue, err := c.buildArgFromAST(arg)
+			argValue, err := c.buildArgFromAST(arg, allowThunks)
 			if err != nil {
 				return nil, err
 			}
@@ -342,7 +351,7 @@ func (c *registry) buildFieldFromAST(definition *ast.FieldDefinition, kind, type
 		}
 	}
 
-	if err := c.applyDirectives(&field, definition.Directives); err != nil {
+	if err := c.applyDirectives(&field, definition.Directives, allowThunks); err != nil {
 		return nil, err
 	}
 
@@ -350,7 +359,7 @@ func (c *registry) buildFieldFromAST(definition *ast.FieldDefinition, kind, type
 }
 
 // builds a union from ast
-func (c *registry) buildUnionFromAST(definition *ast.UnionDefinition) error {
+func (c *registry) buildUnionFromAST(definition *ast.UnionDefinition, allowThunks bool) error {
 	name := definition.Name.Value
 	unionConfig := graphql.UnionConfig{
 		Name:        name,
@@ -374,7 +383,7 @@ func (c *registry) buildUnionFromAST(definition *ast.UnionDefinition) error {
 		return fmt.Errorf("build Union failed: no Object type %q found", unionType.Name.Value)
 	}
 
-	if err := c.applyDirectives(&unionConfig, definition.Directives); err != nil {
+	if err := c.applyDirectives(&unionConfig, definition.Directives, allowThunks); err != nil {
 		return err
 	}
 

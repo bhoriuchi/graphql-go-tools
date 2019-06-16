@@ -3,7 +3,6 @@ package tools
 import (
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
-	"github.com/graphql-go/graphql/language/kinds"
 )
 
 // default root type names
@@ -23,10 +22,8 @@ func MakeExecutableSchema(config ExecutableSchema) (graphql.Schema, error) {
 // https://www.apollographql.com/docs/graphql-tools/generate-schema
 type ExecutableSchema struct {
 	TypeDefs         interface{}
-	Types            *map[string]graphql.Type
-	Resolvers        *ResolverMap
-	SchemaDirectives *SchemaDirectiveVisitorMap
-	Directives       *DirectiveMap
+	Resolvers        map[string]interface{}
+	SchemaDirectives SchemaDirectiveVisitorMap
 	Extensions       []graphql.Extension
 }
 
@@ -39,38 +36,11 @@ func (c *ExecutableSchema) Make() (graphql.Schema, error) {
 	}
 
 	// create a new registry
-	registry := newRegistry(c.Resolvers, c.SchemaDirectives, document, c.Extensions)
+	registry := newRegistry(c.Resolvers, c.SchemaDirectives, c.Extensions, document)
 
-	// add additional types to the registry
-	if c.Types != nil {
-		for name, t := range *c.Types {
-			registry.setType(name, t)
-		}
-	}
-
-	// add additional directives to the registry
-	if c.Directives != nil {
-		for name, d := range *c.Directives {
-			registry.setDirective(name, d)
-		}
-	}
-
-	// build types in order of possible dependencies
-	buildKinds := []string{
-		kinds.DirectiveDefinition,
-		kinds.ScalarDefinition,
-		kinds.EnumDefinition,
-		kinds.InputObjectDefinition,
-		kinds.ObjectDefinition,
-		kinds.InterfaceDefinition,
-		kinds.UnionDefinition,
-		kinds.SchemaDefinition,
-	}
-
-	for _, kind := range buildKinds {
-		if err := registry.buildTypeFromDocument(document, kind); err != nil {
-			return graphql.Schema{}, err
-		}
+	// resolve the document definitions
+	if err := registry.resolveDefinitions(); err != nil {
+		return graphql.Schema{}, err
 	}
 
 	// check if schema was created by definition
@@ -98,7 +68,7 @@ func (c *ExecutableSchema) Make() (graphql.Schema, error) {
 }
 
 // build a schema from an ast
-func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition) error {
+func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition, allowThunks bool) error {
 	schemaConfig := graphql.SchemaConfig{
 		Types:      c.typeArray(),
 		Directives: c.directiveArray(),
@@ -130,7 +100,7 @@ func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition) error {
 	}
 
 	// apply schema directives
-	if err := c.applyDirectives(&schemaConfig, definition.Directives); err != nil {
+	if err := c.applyDirectives(&schemaConfig, definition.Directives, allowThunks); err != nil {
 		return err
 	}
 

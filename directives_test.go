@@ -33,7 +33,7 @@ type Query {
 	// make the schema
 	schema, err := MakeExecutableSchema(ExecutableSchema{
 		TypeDefs: typeDefs,
-		Resolvers: &ResolverMap{
+		Resolvers: map[string]interface{}{
 			"Query": &ObjectResolver{
 				Fields: FieldResolveMap{
 					"foos": func(p graphql.ResolveParams) (interface{}, error) {
@@ -42,8 +42,8 @@ type Query {
 				},
 			},
 		},
-		SchemaDirectives: &SchemaDirectiveVisitorMap{
-			"test": SchemaDirectiveVisitor{
+		SchemaDirectives: SchemaDirectiveVisitorMap{
+			"test": &SchemaDirectiveVisitor{
 				VisitFieldDefinition: func(field *graphql.Field, args map[string]interface{}) {
 					resolveFunc := field.Resolve
 					field.Resolve = func(p graphql.ResolveParams) (interface{}, error) {

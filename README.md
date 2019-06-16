@@ -58,9 +58,9 @@ func main() {
     Resolvers: &tools.ResolverMap{
       "Query": &tools.ObjectResolver{
         Fields: tools.FieldResolveMap{
-          "foos": func(p graphql.ResolveParams) (interface{}, error) {
+          "foo": func(p graphql.ResolveParams) (interface{}, error) {
             // lookup data
-            return foos, nil
+            return foo, nil
           },
         },
       },

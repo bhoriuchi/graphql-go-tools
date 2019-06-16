@@ -23,7 +23,7 @@ type SchemaDirectiveVisitor struct {
 }
 
 // SchemaDirectiveVisitorMap a map of schema directive visitors
-type SchemaDirectiveVisitorMap map[string]SchemaDirectiveVisitor
+type SchemaDirectiveVisitorMap map[string]*SchemaDirectiveVisitor
 
 // DirectiveMap a map of directives
 type DirectiveMap map[string]*graphql.Directive
@@ -38,7 +38,7 @@ func (c *registry) directiveArray() []*graphql.Directive {
 }
 
 // builds directives from ast
-func (c *registry) buildDirectiveFromAST(definition *ast.DirectiveDefinition) error {
+func (c *registry) buildDirectiveFromAST(definition *ast.DirectiveDefinition, allowThunks bool) error {
 	name := definition.Name.Value
 	directiveConfig := graphql.DirectiveConfig{
 		Name:        name,
@@ -48,7 +48,7 @@ func (c *registry) buildDirectiveFromAST(definition *ast.DirectiveDefinition) er
 	}
 
 	for _, arg := range definition.Arguments {
-		if argValue, err := c.buildArgFromAST(arg); err == nil {
+		if argValue, err := c.buildArgFromAST(arg, allowThunks); err == nil {
 			directiveConfig.Args[arg.Name.Value] = argValue
 		} else {
 			return err
@@ -64,15 +64,14 @@ func (c *registry) buildDirectiveFromAST(definition *ast.DirectiveDefinition) er
 }
 
 // applies directives
-func (c *registry) applyDirectives(config interface{}, directives []*ast.Directive) error {
+func (c *registry) applyDirectives(config interface{}, directives []*ast.Directive, allowThunks bool) error {
 	if c.directiveMap == nil {
 		return nil
 	}
 
-	directiveMap := *c.directiveMap
 	for _, def := range directives {
 		name := def.Name.Value
-		visitor, hasVisitor := directiveMap[name]
+		visitor, hasVisitor := c.directiveMap[name]
 		if !hasVisitor {
 			continue
 		}

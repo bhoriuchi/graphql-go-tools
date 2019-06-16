@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/graphql-go/graphql"
@@ -8,26 +9,31 @@ import (
 	"github.com/graphql-go/graphql/language/kinds"
 )
 
+var errUnresolvedDependencies = errors.New("unresolved dependencies")
+
 // registry the registry holds all of the types
 type registry struct {
 	types            map[string]graphql.Type
 	directives       map[string]*graphql.Directive
 	schema           *graphql.Schema
-	resolverMap      *ResolverMap
-	directiveMap     *SchemaDirectiveVisitorMap
+	resolverMap      ResolverMap
+	directiveMap     SchemaDirectiveVisitorMap
 	schemaDirectives []*ast.Directive
 	document         *ast.Document
 	extensions       []graphql.Extension
+	unresolvedDefs   []ast.Node
+	maxIterations    int
+	iterations       int
 }
 
 // newRegistry creates a new registry
 func newRegistry(
-	resolvers *ResolverMap,
-	directives *SchemaDirectiveVisitorMap,
-	document *ast.Document,
+	resolvers map[string]interface{},
+	directiveMap SchemaDirectiveVisitorMap,
 	extensions []graphql.Extension,
+	document *ast.Document,
 ) *registry {
-	return &registry{
+	r := &registry{
 		types: map[string]graphql.Type{
 			"ID":      graphql.ID,
 			"String":  graphql.String,
@@ -40,19 +46,28 @@ func newRegistry(
 			"skip":       graphql.SkipDirective,
 			"deprecated": graphql.DeprecatedDirective,
 		},
-		resolverMap:      resolvers,
-		directiveMap:     directives,
+		resolverMap:      ResolverMap{},
+		directiveMap:     directiveMap,
 		schemaDirectives: []*ast.Directive{},
 		document:         document,
 		extensions:       extensions,
+		unresolvedDefs:   document.Definitions,
+		iterations:       0,
+		maxIterations:    len(document.Definitions),
 	}
+
+	// import each resolver to the correct location
+	for name, resolver := range resolvers {
+		r.importResolver(name, resolver)
+	}
+
+	return r
 }
 
 // looks up a resolver by name or returns nil
 func (c *registry) getResolver(name string) Resolver {
 	if c.resolverMap != nil {
-		resolverMap := *c.resolverMap
-		if resolver, ok := resolverMap[name]; ok {
+		if resolver, ok := c.resolverMap[name]; ok {
 			return resolver
 		}
 	}
@@ -86,7 +101,7 @@ func (c *registry) getType(name string) (graphql.Type, error) {
 	if val, ok := c.types[name]; ok {
 		return val, nil
 	}
-	return nil, fmt.Errorf("type %q not found", name)
+	return nil, errUnresolvedDependencies
 }
 
 // Set sets a graphql type in the registry
@@ -99,7 +114,7 @@ func (c *registry) getDirective(name string) (*graphql.Directive, error) {
 	if val, ok := c.directives[name]; ok {
 		return val, nil
 	}
-	return nil, fmt.Errorf("directive %q not found", name)
+	return nil, errUnresolvedDependencies
 }
 
 // Set sets a graphql directive in the registry
@@ -121,4 +136,165 @@ func (c *registry) getExtensions(name, kind string) []interface{} {
 	}
 
 	return extensions
+}
+
+// imports a resolver from an interface
+func (c *registry) importResolver(name string, resolver interface{}) {
+	switch resolver.(type) {
+	case *graphql.Directive:
+		if _, ok := c.directives[name]; !ok {
+			c.directives[name] = resolver.(*graphql.Directive)
+		}
+
+	case *graphql.InputObject:
+		if _, ok := c.types[name]; !ok {
+			c.types[name] = resolver.(*graphql.InputObject)
+		}
+
+	case *graphql.Scalar:
+		if _, ok := c.types[name]; !ok {
+			c.types[name] = resolver.(*graphql.Scalar)
+		}
+
+	case *graphql.Enum:
+		if _, ok := c.types[name]; !ok {
+			c.types[name] = resolver.(*graphql.Enum)
+		}
+
+	case *graphql.Object:
+		if _, ok := c.types[name]; !ok {
+			c.types[name] = resolver.(*graphql.Object)
+		}
+
+	case *graphql.Interface:
+		if _, ok := c.types[name]; !ok {
+			c.types[name] = resolver.(*graphql.Interface)
+		}
+
+	case *graphql.Union:
+		if _, ok := c.types[name]; !ok {
+			c.types[name] = resolver.(*graphql.Union)
+		}
+
+	case *ScalarResolver:
+		if _, ok := c.resolverMap[name]; !ok {
+			c.resolverMap[name] = resolver.(*ScalarResolver)
+		}
+
+	case *EnumResolver:
+		if _, ok := c.resolverMap[name]; !ok {
+			c.resolverMap[name] = resolver.(*EnumResolver)
+		}
+
+	case *ObjectResolver:
+		if _, ok := c.resolverMap[name]; !ok {
+			c.resolverMap[name] = resolver.(*ObjectResolver)
+		}
+
+	case *InterfaceResolver:
+		if _, ok := c.resolverMap[name]; !ok {
+			c.resolverMap[name] = resolver.(*InterfaceResolver)
+		}
+
+	case *UnionResolver:
+		if _, ok := c.resolverMap[name]; !ok {
+			c.resolverMap[name] = resolver.(*UnionResolver)
+		}
+	}
+}
+
+// iteratively resolves dependencies until all types are resolved
+func (c *registry) resolveDefinitions() error {
+	toResolve := c.unresolvedDefs
+	unresolved := []ast.Node{}
+
+	for len(toResolve) > 0 && c.iterations < c.maxIterations {
+		c.iterations = c.iterations + 1
+		allowThunks := c.iterations == c.maxIterations
+
+		for _, definition := range toResolve {
+			switch nodeKind := definition.GetKind(); nodeKind {
+			case kinds.DirectiveDefinition:
+				if err := c.buildDirectiveFromAST(definition.(*ast.DirectiveDefinition), allowThunks); err != nil {
+					if err == errUnresolvedDependencies {
+						unresolved = append(unresolved, definition)
+					} else {
+						return err
+					}
+				}
+			case kinds.ScalarDefinition:
+				if err := c.buildScalarFromAST(definition.(*ast.ScalarDefinition), allowThunks); err != nil {
+					if err == errUnresolvedDependencies {
+						unresolved = append(unresolved, definition)
+					} else {
+						return err
+					}
+				}
+			case kinds.EnumDefinition:
+				if err := c.buildEnumFromAST(definition.(*ast.EnumDefinition), allowThunks); err != nil {
+					if err == errUnresolvedDependencies {
+						unresolved = append(unresolved, definition)
+					} else {
+						return err
+					}
+				}
+			case kinds.InputObjectDefinition:
+				if err := c.buildInputObjectFromAST(definition.(*ast.InputObjectDefinition), allowThunks); err != nil {
+					if err == errUnresolvedDependencies {
+						unresolved = append(unresolved, definition)
+					} else {
+						return err
+					}
+				}
+			case kinds.ObjectDefinition:
+				if err := c.buildObjectFromAST(definition.(*ast.ObjectDefinition), allowThunks); err != nil {
+					if err == errUnresolvedDependencies {
+						unresolved = append(unresolved, definition)
+					} else {
+						return err
+					}
+				}
+			case kinds.InterfaceDefinition:
+				if err := c.buildInterfaceFromAST(definition.(*ast.InterfaceDefinition), allowThunks); err != nil {
+					if err == errUnresolvedDependencies {
+						unresolved = append(unresolved, definition)
+					} else {
+						return err
+					}
+				}
+			case kinds.UnionDefinition:
+				if err := c.buildUnionFromAST(definition.(*ast.UnionDefinition), allowThunks); err != nil {
+					if err == errUnresolvedDependencies {
+						unresolved = append(unresolved, definition)
+					} else {
+						return err
+					}
+				}
+			case kinds.SchemaDefinition:
+				if err := c.buildSchemaFromAST(definition.(*ast.SchemaDefinition), allowThunks); err != nil {
+					if err == errUnresolvedDependencies {
+						unresolved = append(unresolved, definition)
+					} else {
+						return err
+					}
+				}
+			}
+		}
+
+		// check if everything has been resolved
+		if len(unresolved) == 0 {
+			return nil
+		}
+
+		// prepare the next loop
+		c.maxIterations = len(toResolve) + 1
+		toResolve = unresolved
+		unresolved = []ast.Node{}
+	}
+
+	if len(unresolved) > 0 {
+		return fmt.Errorf("failed to resolve all type definitions")
+	}
+
+	return nil
 }

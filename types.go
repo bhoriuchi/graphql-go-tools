@@ -84,9 +84,15 @@ func (c *registry) buildEnumValueFromAST(definition *ast.EnumValueDefinition, en
 func (c *registry) buildInputObjectFromAST(definition *ast.InputObjectDefinition, allowThunks bool) error {
 	var fields interface{}
 	name := definition.Name.Value
+	inputConfig := graphql.InputObjectConfig{
+		Name:        name,
+		Description: getDescription(definition),
+		Fields:      fields,
+	}
 
 	// use thunks only when allowed
 	if allowThunks {
+		var fields graphql.InputObjectConfigFieldMapThunk
 		fields = func() graphql.InputObjectConfigFieldMap {
 			fieldMap, err := c.buildInputObjectFieldMapFromAST(definition.Fields, allowThunks)
 			if err != nil {
@@ -94,18 +100,13 @@ func (c *registry) buildInputObjectFromAST(definition *ast.InputObjectDefinition
 			}
 			return fieldMap
 		}
+		inputConfig.Fields = fields
 	} else {
 		fieldMap, err := c.buildInputObjectFieldMapFromAST(definition.Fields, allowThunks)
 		if err != nil {
 			return err
 		}
-		fields = fieldMap
-	}
-
-	inputConfig := graphql.InputObjectConfig{
-		Name:        name,
-		Description: getDescription(definition),
-		Fields:      fields,
+		inputConfig.Fields = fieldMap
 	}
 
 	if err := c.applyDirectives(&inputConfig, definition.Directives, allowThunks); err != nil {
@@ -151,13 +152,20 @@ func (c *registry) buildInputObjectFieldFromAST(definition *ast.InputValueDefini
 
 // builds an object from an AST
 func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition, allowThunks bool) error {
-	var ifaces interface{}
-	var fields interface{}
+	//var ifaces interface{}
+	//var fields interface{}
 	name := definition.Name.Value
 	extensions := c.getExtensions(name, definition.GetKind())
+	objectConfig := graphql.ObjectConfig{
+		Name:        name,
+		Description: getDescription(definition),
+		// Interfaces:  ifaces,
+		// Fields:      fields,
+	}
 
 	if allowThunks {
 		// get interfaces thunk
+		var ifaces graphql.InterfacesThunk
 		ifaces = func() []*graphql.Interface {
 			ifaceArr, err := c.buildInterfacesArrayFromAST(definition, extensions, allowThunks)
 			if err != nil {
@@ -167,6 +175,7 @@ func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition, allowThu
 		}
 
 		// get fields thunk
+		var fields graphql.FieldsThunk
 		fields = func() graphql.Fields {
 			fieldMap, err := c.buildFieldMapFromAST(definition.Fields, definition.GetKind(), name, extensions, allowThunks)
 			if err != nil {
@@ -174,27 +183,25 @@ func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition, allowThu
 			}
 			return fieldMap
 		}
+
+		objectConfig.Interfaces = ifaces
+		objectConfig.Fields = fields
+
 	} else {
 		// get interfaces
 		ifaceArr, err := c.buildInterfacesArrayFromAST(definition, extensions, allowThunks)
 		if err != nil {
 			return err
 		}
-		ifaces = ifaceArr
 
 		// get fields
 		fieldMap, err := c.buildFieldMapFromAST(definition.Fields, definition.GetKind(), name, extensions, allowThunks)
 		if err != nil {
 			return err
 		}
-		fields = fieldMap
-	}
 
-	objectConfig := graphql.ObjectConfig{
-		Name:        name,
-		Description: getDescription(definition),
-		Interfaces:  ifaces,
-		Fields:      fields,
+		objectConfig.Interfaces = ifaceArr
+		objectConfig.Fields = fieldMap
 	}
 
 	// update description from extensions if none
@@ -269,11 +276,15 @@ func (c *registry) buildFieldMapFromAST(fields []*ast.FieldDefinition, kind, typ
 
 // builds an interfacefrom ast
 func (c *registry) buildInterfaceFromAST(definition *ast.InterfaceDefinition, allowThunks bool) error {
-	var fields interface{}
 	extensions := []interface{}{}
 	name := definition.Name.Value
+	ifaceConfig := graphql.InterfaceConfig{
+		Name:        name,
+		Description: getDescription(definition),
+	}
 
 	if allowThunks {
+		var fields graphql.FieldsThunk
 		fields = func() graphql.Fields {
 			fieldMap, err := c.buildFieldMapFromAST(definition.Fields, definition.GetKind(), name, extensions, allowThunks)
 			if err != nil {
@@ -281,18 +292,13 @@ func (c *registry) buildInterfaceFromAST(definition *ast.InterfaceDefinition, al
 			}
 			return fieldMap
 		}
+		ifaceConfig.Fields = fields
 	} else {
 		fieldMap, err := c.buildFieldMapFromAST(definition.Fields, definition.GetKind(), name, extensions, allowThunks)
 		if err != nil {
 			return err
 		}
-		fields = fieldMap
-	}
-
-	ifaceConfig := graphql.InterfaceConfig{
-		Name:        name,
-		Description: getDescription(definition),
-		Fields:      fields,
+		ifaceConfig.Fields = fieldMap
 	}
 
 	if r := c.getResolver(name); r != nil && r.getKind() == kinds.InterfaceDefinition {

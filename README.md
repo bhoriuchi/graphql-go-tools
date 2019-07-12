@@ -23,16 +23,6 @@ Like apollo-tools for graphql-go
 ## Example
 
 ```go
-package main
-
-import (
-  "fmt"
-  "log"
-
-  "github.com/bhoriuchi/graphql-go-tools"
-  "github.com/graphql-go/graphql"
-)
-
 func main() {
   schema, err := tools.MakeExecutableSchema(tools.ExecutableSchema{
     TypeDefs: `

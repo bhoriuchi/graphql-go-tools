@@ -1,14 +1,6 @@
 # graphql-go-tools
 Like apollo-tools for graphql-go
 
-[![Documentation](https://godoc.org/github.com/bhoriuchi/graphql-go-tools?status.svg)](https://godoc.org/github.com/bhoriuchi/graphql-go-tools)
-
-## Getting Started
-
-```sh
-go get github.com/bhoriuchi/graphql-go-tools
-```
-
 ## Current Tools
 
 ### `MakeExecutableSchema`
@@ -75,7 +67,7 @@ func main() {
               return result, err
             }
             data := result.(map[string]interface{})
-            data.description = args["value"]
+            data["description"] = args["value"]
             return data, nil
           }
         },

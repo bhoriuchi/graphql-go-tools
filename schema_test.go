@@ -6,6 +6,52 @@ import (
 	"github.com/graphql-go/graphql"
 )
 
+func TestMissingType(t *testing.T) {
+	typeDefs := `
+type Foo {
+	name: String!
+	meta: JSON
+}
+
+input Cyclic {
+	name: String
+	cyclic: Cyclic
+}
+
+type Query {
+	foos: [Foo]
+}`
+
+	// create some data
+	foos := []map[string]interface{}{
+		map[string]interface{}{
+			"name": "foo",
+			"meta": map[string]interface{}{
+				"bar": "baz",
+			},
+		},
+	}
+
+	// make the schema
+	_, err := MakeExecutableSchema(ExecutableSchema{
+		TypeDefs: typeDefs,
+		Resolvers: map[string]interface{}{
+			"Query": &ObjectResolver{
+				Fields: FieldResolveMap{
+					"foos": func(p graphql.ResolveParams) (interface{}, error) {
+						return foos, nil
+					},
+				},
+			},
+		},
+	})
+
+	if err == nil {
+		t.Error("expected undefined type error")
+		return
+	}
+}
+
 func TestMakeExecutableSchema(t *testing.T) {
 	typeDefs := `
 type Foo {

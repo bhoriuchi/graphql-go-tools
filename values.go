@@ -4,6 +4,7 @@ package tools
 // since none of these functions are exported
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 
@@ -30,10 +31,20 @@ func getArgumentValues(argDefs []*graphql.Argument, argASTs []*ast.Argument, var
 		if argAST, ok := argASTMap[name]; ok {
 			valueAST = argAST.Value
 		}
+
 		value := valueFromAST(valueAST, argDef.Type, variableVariables)
+
 		if isNullish(value) {
 			value = argDef.DefaultValue
 		}
+
+		// fix for checking that non nulls are not null
+		typeString := argDef.Type.String()
+		isNonNull := typeString[len(typeString)-1:] == "!"
+		if isNonNull && isNullish(value) {
+			return nil, fmt.Errorf("graphql input %q cannot be null", name)
+		}
+
 		if !isNullish(value) {
 			results[name] = value
 		}

@@ -1,41 +1,28 @@
 package scalars
 
 import (
-	tools "github.com/bhoriuchi/graphql-go-tools"
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
 	"github.com/graphql-go/graphql/language/kinds"
 )
 
-var serializeFn graphql.SerializeFn = func(value interface{}) interface{} {
-	return value
-}
-
-var parseValueFn graphql.ParseValueFn = func(value interface{}) interface{} {
-	return value
-}
-
 // ScalarJSON a scalar JSON type
 var ScalarJSON = graphql.NewScalar(
 	graphql.ScalarConfig{
-		Name:         "JSON",
-		Description:  "The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf)",
-		Serialize:    serializeFn,
-		ParseValue:   parseValueFn,
-		ParseLiteral: parseLiteralFn,
+		Name:        "JSON",
+		Description: "The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf)",
+		Serialize: func(value interface{}) interface{} {
+			return value
+		},
+		ParseValue: func(value interface{}) interface{} {
+			return value
+		},
+		ParseLiteral: parseLiteralJSONFn,
 	},
 )
 
-// ScalarJSONResolver returns a resolver that can
-// be used to build a scalar JSON type
-var ScalarJSONResolver = &tools.ScalarResolver{
-	Serialize:    serializeFn,
-	ParseValue:   parseValueFn,
-	ParseLiteral: parseLiteralFn,
-}
-
 // recursively parse ast
-func parseLiteralFn(astValue ast.Value) interface{} {
+func parseLiteralJSONFn(astValue ast.Value) interface{} {
 	switch kind := astValue.GetKind(); kind {
 	// get value for primitive types
 	case kinds.StringValue, kinds.BooleanValue, kinds.IntValue, kinds.FloatValue:
@@ -45,7 +32,7 @@ func parseLiteralFn(astValue ast.Value) interface{} {
 	case kinds.ObjectValue:
 		obj := make(map[string]interface{})
 		for _, v := range astValue.GetValue().([]*ast.ObjectField) {
-			obj[v.Name.Value] = parseLiteralFn(v.Value)
+			obj[v.Name.Value] = parseLiteralJSONFn(v.Value)
 		}
 		return obj
 
@@ -53,7 +40,7 @@ func parseLiteralFn(astValue ast.Value) interface{} {
 	case kinds.ListValue:
 		list := make([]interface{}, 0)
 		for _, v := range astValue.GetValue().([]ast.Value) {
-			list = append(list, parseLiteralFn(v))
+			list = append(list, parseLiteralJSONFn(v))
 		}
 		return list
 

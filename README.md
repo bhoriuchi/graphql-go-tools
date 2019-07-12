@@ -98,3 +98,9 @@ func main() {
 }
 
 ```
+
+### Handler
+
+Modified `graphql-go/handler` with updated GraphiQL and Playground
+
+See [handler package](handler)

@@ -22,7 +22,7 @@ func MakeExecutableSchema(config ExecutableSchema) (graphql.Schema, error) {
 // https://www.apollographql.com/docs/graphql-tools/generate-schema
 type ExecutableSchema struct {
 	TypeDefs         interface{}               // a string, []string, or func() []string
-	Resolvers        map[string]interface{}    // a map of Resolver, Directive, Scalar, Enum, Object, InputObject, Union, or Interface
+	Resolvers        map[string]Resolver       // a map of Resolver, Directive, Scalar, Enum, Object, InputObject, Union, or Interface
 	SchemaDirectives SchemaDirectiveVisitorMap // Map of SchemaDirectiveVisitor
 	Extensions       []graphql.Extension       // GraphQL extensions
 }

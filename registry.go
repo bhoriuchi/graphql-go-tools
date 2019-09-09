@@ -28,18 +28,19 @@ type registry struct {
 
 // newRegistry creates a new registry
 func newRegistry(
-	resolvers map[string]interface{},
+	resolvers map[string]Resolver,
 	directiveMap SchemaDirectiveVisitorMap,
 	extensions []graphql.Extension,
 	document *ast.Document,
 ) *registry {
 	r := &registry{
 		types: map[string]graphql.Type{
-			"ID":      graphql.ID,
-			"String":  graphql.String,
-			"Int":     graphql.Int,
-			"Float":   graphql.Float,
-			"Boolean": graphql.Boolean,
+			"ID":       graphql.ID,
+			"String":   graphql.String,
+			"Int":      graphql.Int,
+			"Float":    graphql.Float,
+			"Boolean":  graphql.Boolean,
+			"DateTime": graphql.DateTime,
 		},
 		directives: map[string]*graphql.Directive{
 			"include":    graphql.IncludeDirective,

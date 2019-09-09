@@ -37,7 +37,7 @@ func main() {
     type Query {
       foo(id: ID!): Foo @description(value: "bazqux")
     }`,
-    Resolvers: &tools.ResolverMap{
+    Resolvers: tools.ResolverMap{
       "Query": &tools.ObjectResolver{
         Fields: tools.FieldResolveMap{
           "foo": func(p graphql.ResolveParams) (interface{}, error) {

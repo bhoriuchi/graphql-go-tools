@@ -17,6 +17,11 @@ func MakeExecutableSchema(config ExecutableSchema) (graphql.Schema, error) {
 	return config.Make()
 }
 
+// MakeSchemaConfig creates a schema config that maintain intact types
+func MakeSchemaConfig(config ExecutableSchema) (graphql.SchemaConfig, error) {
+	return config.MakeSchemaConfig()
+}
+
 // ExecutableSchema configuration for making an executable schema
 // this attempts to provide similar functionality to Apollo graphql-tools
 // https://www.apollographql.com/docs/graphql-tools/generate-schema

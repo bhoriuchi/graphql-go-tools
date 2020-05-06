@@ -27,12 +27,12 @@ type ExecutableSchema struct {
 	Extensions       []graphql.Extension       // GraphQL extensions
 }
 
-// Make creates an executable graphql schema
-func (c *ExecutableSchema) Make() (graphql.Schema, error) {
+// MakeSchemaConfig creates a graphql schema config, which contains all the types parsed from the typeDefs
+func (c *ExecutableSchema) MakeSchemaConfig() (graphql.SchemaConfig, error) {
 	// combine the TypeDefs
 	document, err := c.ConcatenateTypeDefs()
 	if err != nil {
-		return graphql.Schema{}, err
+		return graphql.SchemaConfig{}, err
 	}
 
 	// create a new registry
@@ -40,12 +40,12 @@ func (c *ExecutableSchema) Make() (graphql.Schema, error) {
 
 	// resolve the document definitions
 	if err := registry.resolveDefinitions(); err != nil {
-		return graphql.Schema{}, err
+		return graphql.SchemaConfig{}, err
 	}
 
 	// check if schema was created by definition
-	if registry.schema != nil {
-		return *registry.schema, nil
+	if registry.schemaConfig != nil {
+		return *registry.schemaConfig, nil
 	}
 
 	// otherwise build a schema from default object names
@@ -62,7 +62,15 @@ func (c *ExecutableSchema) Make() (graphql.Schema, error) {
 		Directives:   registry.directiveArray(),
 		Extensions:   c.Extensions,
 	}
+	return schemaConfig, nil
+}
 
+// Make creates an executable graphql schema
+func (c *ExecutableSchema) Make() (graphql.Schema, error) {
+	schemaConfig, err := c.MakeSchemaConfig()
+	if err != nil {
+		return graphql.Schema{}, err
+	}
 	// create a new schema
 	return graphql.NewSchema(schemaConfig)
 }
@@ -111,5 +119,6 @@ func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition, allowThu
 	}
 
 	c.schema = &schema
+	c.schemaConfig = &schemaConfig
 	return nil
 }

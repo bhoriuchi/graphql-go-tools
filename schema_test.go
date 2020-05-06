@@ -114,7 +114,7 @@ schema {
 	}
 }
 
-func TestMakeConfigSchema(t *testing.T) {
+func TestMakeSchemaConfig(t *testing.T) {
 	typeDefs := `
 type Foo {
 	name: String!

@@ -27,7 +27,7 @@ type ExecutableSchema struct {
 	Extensions       []graphql.Extension       // GraphQL extensions
 }
 
-// MakeSchemaConfig creates a graphql schema config, which contains all the types parsed from the typeDefs
+// MakeSchemaConfig creates a graphql schema config, this struct maintains intact the types and does not require the use of a non empty Query
 func (c *ExecutableSchema) MakeSchemaConfig() (graphql.SchemaConfig, error) {
 	// combine the TypeDefs
 	document, err := c.ConcatenateTypeDefs()

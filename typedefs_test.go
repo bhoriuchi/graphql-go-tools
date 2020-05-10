@@ -66,7 +66,6 @@ func TestObjectIsTypeOf(t *testing.T) {
 				name: String!
 			}
 			type B {
-				name: String!
 				description: String
 			}
 			union Foo = A | B
@@ -74,6 +73,18 @@ func TestObjectIsTypeOf(t *testing.T) {
 			extend type Query {
 				foo: Foo
 			}`,
+		},
+		Resolvers: map[string]Resolver{
+			"A": &ObjectResolver{
+				IsTypeOf: func(p graphql.IsTypeOfParams) bool {
+					return true
+				},
+			},
+			"B": &ObjectResolver{
+				IsTypeOf: func(p graphql.IsTypeOfParams) bool {
+					return false
+				},
+			},
 		},
 	}
 
@@ -88,7 +99,12 @@ func TestObjectIsTypeOf(t *testing.T) {
 		Schema: schema,
 		RequestString: `query Query {
 			foo {
-				name
+				...on A {
+					name
+				}
+				...on B {
+					description
+				}
 			}
 		}`,
 	})

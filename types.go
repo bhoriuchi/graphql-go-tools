@@ -200,6 +200,13 @@ func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition, allowThu
 		objectConfig.Fields = fieldMap
 	}
 
+	// set IsTypeOf from resolvers
+	if r := c.getResolver(name); r != nil {
+		if resolver, ok := r.(*ObjectResolver); ok {
+			objectConfig.IsTypeOf = resolver.IsTypeOf
+		}
+	}
+
 	// update description from extensions if none
 	for _, extDef := range extensions {
 		if objectConfig.Description != "" {

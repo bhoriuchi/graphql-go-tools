@@ -392,6 +392,13 @@ func (c *registry) buildUnionFromAST(definition *ast.UnionDefinition, allowThunk
 		return fmt.Errorf("build Union failed: no Object type %q found", unionType.Name.Value)
 	}
 
+	// set ResolveType from resolvers
+	if r := c.getResolver(name); r != nil {
+		if resolver, ok := r.(*UnionResolver); ok {
+			unionConfig.ResolveType = resolver.ResolveType
+		}
+	}
+
 	if err := c.applyDirectives(&unionConfig, definition.Directives, allowThunks); err != nil {
 		return err
 	}

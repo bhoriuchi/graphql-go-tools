@@ -55,3 +55,46 @@ func TestConcatenateTypeDefs(t *testing.T) {
 		return
 	}
 }
+
+func TestObjectIsTypeOf(t *testing.T) {
+	config := ExecutableSchema{
+		TypeDefs: []string{
+			"type Query{}",
+			`
+			# a foo
+			type A {
+				name: String!
+			}
+			type B {
+				name: String!
+				description: String
+			}
+			union Foo = A | B
+			
+			extend type Query {
+				foo: Foo
+			}`,
+		},
+	}
+
+	schema, err := MakeExecutableSchema(config)
+	if err != nil {
+		t.Errorf("failed to make schema from concatenated TypeDefs: %v", err)
+		return
+	}
+
+	// perform a query
+	r := graphql.Do(graphql.Params{
+		Schema: schema,
+		RequestString: `query Query {
+			foo {
+				name
+			}
+		}`,
+	})
+
+	if r.HasErrors() {
+		t.Error(r.Errors)
+		return
+	}
+}

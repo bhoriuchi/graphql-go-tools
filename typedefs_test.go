@@ -20,7 +20,12 @@ func TestConcatenateTypeDefs(t *testing.T) {
 			extend type Query {
 				foo: Foo
 			}`,
-			`type Bar {
+			`
+			interface Named {
+				name: String!
+			}
+			
+			type Bar implements Named {
 				name: String!
 				description: String
 			}

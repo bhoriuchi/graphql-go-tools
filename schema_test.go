@@ -113,3 +113,36 @@ schema {
 		return
 	}
 }
+
+func TestMakeSchemaConfig(t *testing.T) {
+	typeDefs := `
+type Foo {
+	name: String!
+	description: String
+}
+`
+	// make the schema
+	config := ExecutableSchema{
+		TypeDefs: typeDefs,
+	}
+	schemaConfig, err := config.MakeSchemaConfig()
+
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	objects := 0
+	for _, gqlType := range schemaConfig.Types {
+		_, err := gqlType.(*graphql.Object)
+		if !err {
+			continue
+		}
+		objects++
+		// for k, field := range obj.Fields() {
+		// 	println(k, field.Type.Name())
+		// }
+	}
+	if objects != 1 {
+		t.Error("MakeSchemaConfig does not maintain schema types")
+	}
+}

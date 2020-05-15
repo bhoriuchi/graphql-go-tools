@@ -301,7 +301,7 @@ func (c *registry) buildInterfaceFromAST(definition *ast.InterfaceDefinition, al
 		ifaceConfig.ResolveType = r.(*InterfaceResolver).ResolveType
 	}
 
-	if err := c.applyDirectives(&ifaceConfig, definition.Directives, allowThunks); err == nil {
+	if err := c.applyDirectives(&ifaceConfig, definition.Directives, allowThunks); err != nil {
 		return err
 	}
 

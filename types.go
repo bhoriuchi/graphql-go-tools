@@ -200,6 +200,13 @@ func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition, allowThu
 		objectConfig.Fields = fieldMap
 	}
 
+	// set IsTypeOf from resolvers
+	if r := c.getResolver(name); r != nil {
+		if resolver, ok := r.(*ObjectResolver); ok {
+			objectConfig.IsTypeOf = resolver.IsTypeOf
+		}
+	}
+
 	// update description from extensions if none
 	for _, extDef := range extensions {
 		if objectConfig.Description != "" {
@@ -383,6 +390,13 @@ func (c *registry) buildUnionFromAST(definition *ast.UnionDefinition, allowThunk
 			}
 		}
 		return fmt.Errorf("build Union failed: no Object type %q found", unionType.Name.Value)
+	}
+
+	// set ResolveType from resolvers
+	if r := c.getResolver(name); r != nil {
+		if resolver, ok := r.(*UnionResolver); ok {
+			unionConfig.ResolveType = resolver.ResolveType
+		}
 	}
 
 	if err := c.applyDirectives(&unionConfig, definition.Directives, allowThunks); err != nil {

@@ -47,8 +47,8 @@ func main() {
         },
       },
     },
-    SchemaDirectives: &tools.SchemaDirectiveVisitorMap{
-      "description": tools.SchemaDirectiveVisitor{
+    SchemaDirectives: tools.SchemaDirectiveVisitorMap{
+      "description": &tools.SchemaDirectiveVisitor{
         VisitFieldDefinition: func(field *graphql.Field, args map[string]interface{}) {
           resolveFunc := field.Resolve
           field.Resolve = func(p graphql.ResolveParams) (interface{}, error) {

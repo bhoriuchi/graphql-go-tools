@@ -78,7 +78,7 @@ func renderPlayground(config *PlaygroundConfig, w http.ResponseWriter, r *http.R
 }
 
 // PlaygroundVersion the default version to use
-const PlaygroundVersion = "1.7.20"
+var PlaygroundVersion = "1.7.20"
 
 const graphcoolPlaygroundTemplate = `
 {{ define "index" }}

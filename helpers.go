@@ -29,6 +29,24 @@ func (c *registry) getFieldResolveFn(kind, typeName, fieldName string) graphql.F
 	return graphql.DefaultResolveFn
 }
 
+/*
+func (c *registry) getFieldSubscribeFn(kind, typeName, fieldName string) graphql.FieldResolveFn {
+	if r := c.getResolver(typeName); r != nil && kind == r.getKind() {
+		switch kind {
+		case kinds.ObjectDefinition:
+			if fieldResolve, ok := r.(*ObjectResolver).Fields[fieldName]; ok {
+				return fieldResolve.Subscribe
+			}
+		case kinds.InterfaceDefinition:
+			if fieldResolve, ok := r.(*InterfaceResolver).Fields[fieldName]; ok {
+				return fieldResolve.Subscribe
+			}
+		}
+	}
+	return nil
+}
+*/
+
 // Recursively builds a complex type
 func (c registry) buildComplexType(astType ast.Type) (graphql.Type, error) {
 	switch kind := astType.GetKind(); kind {
@@ -139,4 +157,63 @@ func unaliasedPathArray(set *ast.SelectionSet, remaining []interface{}, current 
 		}
 	}
 	return current
+}
+
+// GetPathFieldSubSelections gets the subselectiond for a path
+func GetPathFieldSubSelections(info graphql.ResolveInfo, field ...string) (names []string, err error) {
+	names = []string{}
+	if len(info.FieldASTs) == 0 {
+		return
+	}
+
+	fieldAST := info.FieldASTs[0]
+	if fieldAST.GetSelectionSet() == nil {
+		return
+	}
+
+	// get any sub selections
+	for _, f := range field {
+		for _, sel := range fieldAST.GetSelectionSet().Selections {
+			switch sel.(type) {
+			case *ast.InlineFragment:
+				fragment := sel.(*ast.InlineFragment)
+				for _, ss := range fragment.GetSelectionSet().Selections {
+					switch ss.(type) {
+					case *ast.Field:
+						subField := ss.(*ast.Field)
+						if subField.Name.Value == f {
+							fieldAST = subField
+							break
+						}
+					}
+				}
+			case *ast.Field:
+				subField := sel.(*ast.Field)
+				if subField.Name.Value == f {
+					fieldAST = subField
+					continue
+				}
+			}
+		}
+	}
+
+	for _, sel := range fieldAST.GetSelectionSet().Selections {
+		switch sel.(type) {
+		case *ast.InlineFragment:
+			fragment := sel.(*ast.InlineFragment)
+			for _, ss := range fragment.GetSelectionSet().Selections {
+				switch ss.(type) {
+				case *ast.Field:
+					field := ss.(*ast.Field)
+					names = append(names, field.Name.Value)
+				}
+			}
+
+		case *ast.Field:
+			field := sel.(*ast.Field)
+			names = append(names, field.Name.Value)
+		}
+	}
+
+	return
 }

@@ -24,7 +24,7 @@ type Query {
 
 	// create some data
 	foos := []map[string]interface{}{
-		map[string]interface{}{
+		{
 			"name": "foo",
 			"meta": map[string]interface{}{
 				"bar": "baz",
@@ -72,7 +72,7 @@ schema {
 
 	// create some data
 	foos := []map[string]interface{}{
-		map[string]interface{}{
+		{
 			"name":        "foo",
 			"description": "a foo",
 		},

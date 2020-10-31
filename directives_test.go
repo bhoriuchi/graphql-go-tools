@@ -24,7 +24,7 @@ type Query {
 
 	// create some data
 	foos := []map[string]interface{}{
-		map[string]interface{}{
+		{
 			"name":        "foo",
 			"description": "a foo",
 		},

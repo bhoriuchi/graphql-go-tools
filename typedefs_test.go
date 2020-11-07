@@ -79,7 +79,7 @@ func TestObjectIsTypeOf(t *testing.T) {
 				foo: Foo
 			}`,
 		},
-		Resolvers: map[string]Resolver{
+		Resolvers: map[string]interface{}{
 			"A": &ObjectResolver{
 				IsTypeOf: func(p graphql.IsTypeOfParams) bool {
 					return true
@@ -138,7 +138,7 @@ func TestUnionResolveType(t *testing.T) {
 				foo: Foo
 			}`,
 		},
-		Resolvers: map[string]Resolver{
+		Resolvers: map[string]interface{}{
 			"Foo": &UnionResolver{
 				ResolveType: func(p graphql.ResolveTypeParams) *graphql.Object {
 					return p.Info.Schema.TypeMap()["A"].(*graphql.Object)

@@ -17,7 +17,7 @@ type registry struct {
 	directives       map[string]*graphql.Directive
 	schema           *graphql.Schema
 	schemaConfig     *graphql.SchemaConfig
-	resolverMap      ResolverMap
+	resolverMap      resolverMap
 	directiveMap     SchemaDirectiveVisitorMap
 	schemaDirectives []*ast.Directive
 	document         *ast.Document
@@ -29,7 +29,7 @@ type registry struct {
 
 // newRegistry creates a new registry
 func newRegistry(
-	resolvers map[string]Resolver,
+	resolvers map[string]interface{},
 	directiveMap SchemaDirectiveVisitorMap,
 	extensions []graphql.Extension,
 	document *ast.Document,
@@ -48,7 +48,7 @@ func newRegistry(
 			"skip":       graphql.SkipDirective,
 			"deprecated": graphql.DeprecatedDirective,
 		},
-		resolverMap:      ResolverMap{},
+		resolverMap:      resolverMap{},
 		directiveMap:     directiveMap,
 		schemaDirectives: []*ast.Directive{},
 		document:         document,

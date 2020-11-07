@@ -18,11 +18,11 @@ func (c *registry) getFieldResolveFn(kind, typeName, fieldName string) graphql.F
 		switch kind {
 		case kinds.ObjectDefinition:
 			if fn, ok := r.(*ObjectResolver).Fields[fieldName]; ok {
-				return fn
+				return fn.Resolve
 			}
 		case kinds.InterfaceDefinition:
 			if fn, ok := r.(*InterfaceResolver).Fields[fieldName]; ok {
-				return fn
+				return fn.Resolve
 			}
 		}
 	}

@@ -35,11 +35,13 @@ type Query {
 	// make the schema
 	_, err := MakeExecutableSchema(ExecutableSchema{
 		TypeDefs: typeDefs,
-		Resolvers: ResolverMap{
+		Resolvers: map[string]interface{}{
 			"Query": &ObjectResolver{
 				Fields: FieldResolveMap{
-					"foos": func(p graphql.ResolveParams) (interface{}, error) {
-						return foos, nil
+					"foos": &FieldResolve{
+						Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+							return foos, nil
+						},
 					},
 				},
 			},
@@ -81,11 +83,13 @@ schema {
 	// make the schema
 	schema, err := MakeExecutableSchema(ExecutableSchema{
 		TypeDefs: typeDefs,
-		Resolvers: ResolverMap{
+		Resolvers: map[string]interface{}{
 			"Query": &ObjectResolver{
 				Fields: FieldResolveMap{
-					"foos": func(p graphql.ResolveParams) (interface{}, error) {
-						return foos, nil
+					"foos": &FieldResolve{
+						Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+							return foos, nil
+						},
 					},
 				},
 			},

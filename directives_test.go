@@ -36,8 +36,10 @@ type Query {
 		Resolvers: ResolverMap{
 			"Query": &ObjectResolver{
 				Fields: FieldResolveMap{
-					"foos": func(p graphql.ResolveParams) (interface{}, error) {
-						return foos, nil
+					"foos": &FieldResolve{
+						Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+							return foos, nil
+						},
 					},
 				},
 			},

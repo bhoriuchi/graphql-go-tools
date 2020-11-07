@@ -16,7 +16,6 @@ type registry struct {
 	types            map[string]graphql.Type
 	directives       map[string]*graphql.Directive
 	schema           *graphql.Schema
-	schemaConfig     *graphql.SchemaConfig
 	resolverMap      resolverMap
 	directiveMap     SchemaDirectiveVisitorMap
 	schemaDirectives []*ast.Directive

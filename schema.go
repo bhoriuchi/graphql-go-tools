@@ -17,11 +17,6 @@ func MakeExecutableSchema(config ExecutableSchema) (graphql.Schema, error) {
 	return config.Make()
 }
 
-// MakeSchemaConfig creates a schema config that maintain intact types
-func MakeSchemaConfig(config ExecutableSchema) (graphql.SchemaConfig, error) {
-	return config.MakeSchemaConfig()
-}
-
 // ExecutableSchema configuration for making an executable schema
 // this attempts to provide similar functionality to Apollo graphql-tools
 // https://www.apollographql.com/docs/graphql-tools/generate-schema
@@ -32,12 +27,12 @@ type ExecutableSchema struct {
 	Extensions       []graphql.Extension       // GraphQL extensions
 }
 
-// MakeSchemaConfig creates a graphql schema config, this struct maintains intact the types and does not require the use of a non empty Query
-func (c *ExecutableSchema) MakeSchemaConfig() (graphql.SchemaConfig, error) {
+// Make creates a graphql schema config, this struct maintains intact the types and does not require the use of a non empty Query
+func (c *ExecutableSchema) Make() (graphql.Schema, error) {
 	// combine the TypeDefs
 	document, err := c.ConcatenateTypeDefs()
 	if err != nil {
-		return graphql.SchemaConfig{}, err
+		return graphql.Schema{}, err
 	}
 
 	// create a new registry
@@ -45,12 +40,12 @@ func (c *ExecutableSchema) MakeSchemaConfig() (graphql.SchemaConfig, error) {
 
 	// resolve the document definitions
 	if err := registry.resolveDefinitions(); err != nil {
-		return graphql.SchemaConfig{}, err
+		return graphql.Schema{}, err
 	}
 
 	// check if schema was created by definition
-	if registry.schemaConfig != nil {
-		return *registry.schemaConfig, nil
+	if registry.schema != nil {
+		return *registry.schema, nil
 	}
 
 	// otherwise build a schema from default object names
@@ -67,15 +62,7 @@ func (c *ExecutableSchema) MakeSchemaConfig() (graphql.SchemaConfig, error) {
 		Directives:   registry.directiveArray(),
 		Extensions:   c.Extensions,
 	}
-	return schemaConfig, nil
-}
 
-// Make creates an executable graphql schema
-func (c *ExecutableSchema) Make() (graphql.Schema, error) {
-	schemaConfig, err := c.MakeSchemaConfig()
-	if err != nil {
-		return graphql.Schema{}, err
-	}
 	// create a new schema
 	return graphql.NewSchema(schemaConfig)
 }
@@ -124,6 +111,5 @@ func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition, allowThu
 	}
 
 	c.schema = &schema
-	c.schemaConfig = &schemaConfig
 	return nil
 }

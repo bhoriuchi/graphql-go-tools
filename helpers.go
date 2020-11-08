@@ -217,3 +217,49 @@ func GetPathFieldSubSelections(info graphql.ResolveInfo, field ...string) (names
 
 	return
 }
+
+// MergeResolverMap merges resolver map
+func MergeResolverMap(in ...ResolverMap) (out ResolverMap) {
+	out = ResolverMap{}
+
+	for _, v := range in {
+		for name, resolver := range v {
+			current, ok := out[name]
+			if !ok {
+				out[name] = resolver
+				continue
+			}
+
+			switch current.(type) {
+			case *ObjectResolver:
+				co := current.(*ObjectResolver)
+				no, ok := resolver.(*ObjectResolver)
+				if ok && no != nil {
+					out[name] = MergeObjectResolver(co, no)
+				}
+			}
+		}
+	}
+
+	return
+}
+
+// MergeObjectResolver merges an object resolver
+func MergeObjectResolver(in ...*ObjectResolver) (out *ObjectResolver) {
+	out = &ObjectResolver{
+		Fields: FieldResolveMap{},
+	}
+
+	for _, resolver := range in {
+		if out.IsTypeOf == nil && resolver.IsTypeOf != nil {
+			out.IsTypeOf = resolver.IsTypeOf
+		}
+		for name, value := range resolver.Fields {
+			if _, ok := out.Fields[name]; !ok {
+				out.Fields[name] = value
+			}
+		}
+	}
+
+	return
+}

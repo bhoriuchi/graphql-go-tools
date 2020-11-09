@@ -245,10 +245,6 @@ func (conn *connection) writeLoop() {
 				return
 			}
 
-			conn.logger.WithFields(logrus.Fields{
-				"msg": msg.String(),
-			}).Debug("Send message")
-
 			conn.ws.SetWriteDeadline(time.Now().Add(writeTimeout))
 
 			// Send the message to the client; if this times out, the WebSocket

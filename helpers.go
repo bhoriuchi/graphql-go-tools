@@ -17,19 +17,22 @@ func (c *registry) getFieldResolveFn(kind, typeName, fieldName string) graphql.F
 	if r := c.getResolver(typeName); r != nil && kind == r.getKind() {
 		switch kind {
 		case kinds.ObjectDefinition:
-			if fn, ok := r.(*ObjectResolver).Fields[fieldName]; ok {
-				return fn.Resolve
+			if fieldResolve, ok := r.(*ObjectResolver).Fields[fieldName]; ok {
+				if fieldResolve.Resolve != nil {
+					return fieldResolve.Resolve
+				}
 			}
 		case kinds.InterfaceDefinition:
-			if fn, ok := r.(*InterfaceResolver).Fields[fieldName]; ok {
-				return fn.Resolve
+			if fieldResolve, ok := r.(*InterfaceResolver).Fields[fieldName]; ok {
+				if fieldResolve.Resolve != nil {
+					return fieldResolve.Resolve
+				}
 			}
 		}
 	}
 	return graphql.DefaultResolveFn
 }
 
-/*
 func (c *registry) getFieldSubscribeFn(kind, typeName, fieldName string) graphql.FieldResolveFn {
 	if r := c.getResolver(typeName); r != nil && kind == r.getKind() {
 		switch kind {
@@ -45,7 +48,6 @@ func (c *registry) getFieldSubscribeFn(kind, typeName, fieldName string) graphql
 	}
 	return nil
 }
-*/
 
 // Recursively builds a complex type
 func (c registry) buildComplexType(astType ast.Type) (graphql.Type, error) {

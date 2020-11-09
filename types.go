@@ -348,6 +348,7 @@ func (c *registry) buildFieldFromAST(definition *ast.FieldDefinition, kind, type
 		Type:        fieldType,
 		Args:        graphql.FieldConfigArgument{},
 		Resolve:     c.getFieldResolveFn(kind, typeName, definition.Name.Value),
+		Subscribe:   c.getFieldSubscribeFn(kind, typeName, definition.Name.Value),
 	}
 
 	for _, arg := range definition.Arguments {

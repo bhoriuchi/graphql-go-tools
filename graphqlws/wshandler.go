@@ -12,7 +12,24 @@ import (
 var logger = logrus.New()
 
 // ConnKey the connection key
-var ConnKey interface{} = "conn"
+var ConnKey interface{} = "graphqlWSConn"
+
+// stores information about the channel and context of the subscription
+type operationStore struct {
+	cancelFunc context.CancelFunc
+	resultChan chan *graphql.Result
+}
+
+// cancels the operation context and closes the result channel
+func (c *operationStore) cancel() {
+	if c.cancelFunc != nil {
+		c.cancelFunc()
+	}
+
+	if _, more := <-c.resultChan; more {
+		close(c.resultChan)
+	}
+}
 
 // SetLogger sets the logger
 func SetLogger(externalLogger *logrus.Logger) {
@@ -33,7 +50,7 @@ func NewHandler(config HandlerConfig) http.Handler {
 		Subprotocols: []string{"graphql-ws"},
 	}
 
-	var connections = make(map[string]map[string]chan *graphql.Result)
+	var connections = make(map[string]map[string]*operationStore)
 
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
@@ -57,21 +74,26 @@ func NewHandler(config HandlerConfig) http.Handler {
 			conn := NewConnection(ws, ConnectionConfig{
 				Authenticate: config.Authenticate,
 				EventHandlers: ConnectionEventHandlers{
+
+					// Close cancels any operations and closes the connection
 					Close: func(conn Connection) {
 						logger.WithFields(logrus.Fields{
 							"conn": conn.ID(),
 						}).Debug("Closing connection")
 
+						// cancel any operations and clean up the connection
 						for opID := range connections[conn.ID()] {
-							iterator, ok := connections[conn.ID()][opID]
-							if ok && iterator != nil {
-								close(connections[conn.ID()][opID])
+							store, ok := connections[conn.ID()][opID]
+							if ok && store != nil {
+								store.cancel()
 							}
 							delete(connections[conn.ID()], opID)
 						}
 
 						delete(connections, conn.ID())
 					},
+
+					// StartOperation performs the subsctition request
 					StartOperation: func(
 						conn Connection,
 						opID string,
@@ -82,8 +104,14 @@ func NewHandler(config HandlerConfig) http.Handler {
 							"op":   opID,
 						}).Debug("Start operation")
 
-						ctx := context.WithValue(context.Background(), ConnKey, conn)
-						resultChannel := graphql.Subscribe(graphql.Params{
+						// create a new cancellable context and store the connection there
+						// the connection can be used to access the current authentication key
+						ctx, cancelFunc := context.WithCancel(
+							context.WithValue(context.Background(), ConnKey, conn),
+						)
+
+						// perform subscribe operation
+						resultChan := graphql.Subscribe(graphql.Params{
 							Schema:         config.Schema,
 							RequestString:  data.Query,
 							VariableValues: data.Variables,
@@ -92,14 +120,19 @@ func NewHandler(config HandlerConfig) http.Handler {
 							RootObject:     config.RootValue,
 						})
 
-						connections[conn.ID()][opID] = resultChannel
+						// create a new operation store with the cancelFunc and result channel
+						connections[conn.ID()][opID] = &operationStore{
+							cancelFunc: cancelFunc,
+							resultChan: resultChan,
+						}
 
+						// listen for messages
 						go func() {
 							for {
 								select {
 								case <-ctx.Done():
 									return
-								case res, more := <-resultChannel:
+								case res, more := <-resultChan:
 									if !more {
 										return
 									}
@@ -123,22 +156,28 @@ func NewHandler(config HandlerConfig) http.Handler {
 
 						return nil
 					},
+
+					// Stops and cleans up the subscription
 					StopOperation: func(conn Connection, opID string) {
 						logger.WithFields(logrus.Fields{
 							"conn": conn.ID(),
 							"op":   opID,
 						}).Debug("Stop operation")
 
-						iterator, ok := connections[conn.ID()][opID]
-						if ok && iterator != nil {
-							close(connections[conn.ID()][opID])
+						// get the store, and if found attempt to cancel the operation and close the channel
+						store, ok := connections[conn.ID()][opID]
+						if ok && store != nil {
+							store.cancel()
 						}
+
+						// clean up the operation from the connections
 						delete(connections[conn.ID()], opID)
 					},
 				},
 			})
 
-			connections[conn.ID()] = map[string]chan *graphql.Result{}
+			// create a new operation hash for the connection
+			connections[conn.ID()] = map[string]*operationStore{}
 		},
 	)
 }

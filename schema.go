@@ -21,10 +21,11 @@ func MakeExecutableSchema(config ExecutableSchema) (graphql.Schema, error) {
 // this attempts to provide similar functionality to Apollo graphql-tools
 // https://www.apollographql.com/docs/graphql-tools/generate-schema
 type ExecutableSchema struct {
-	TypeDefs         interface{}               // a string, []string, or func() []string
-	Resolvers        map[string]interface{}    // a map of Resolver, Directive, Scalar, Enum, Object, InputObject, Union, or Interface
-	SchemaDirectives SchemaDirectiveVisitorMap // Map of SchemaDirectiveVisitor
-	Extensions       []graphql.Extension       // GraphQL extensions
+	TypeDefs              interface{}               // a string, []string, or func() []string
+	Resolvers             map[string]interface{}    // a map of Resolver, Directive, Scalar, Enum, Object, InputObject, Union, or Interface
+	SchemaDirectives      SchemaDirectiveVisitorMap // Map of SchemaDirectiveVisitor
+	Extensions            []graphql.Extension       // GraphQL extensions
+	DefaultFieldResolveFn graphql.FieldResolveFn
 }
 
 // Make creates a graphql schema config, this struct maintains intact the types and does not require the use of a non empty Query

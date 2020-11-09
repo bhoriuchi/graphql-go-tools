@@ -204,7 +204,10 @@ const latestGraphQLPlayground = `
   </div>
   <script>window.addEventListener('load', function (event) {
       GraphQLPlayground.init(document.getElementById('root'), {
-        // options as 'endpoint' belong here
+				// options as 'endpoint' belong here
+        endpoint: {{ .Endpoint }},
+        subscriptionEndpoint: {{ .SubscriptionEndpoint }},
+        setTitle: {{ .SetTitle }}
       })
     })</script>
 </body>

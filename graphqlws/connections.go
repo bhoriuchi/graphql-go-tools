@@ -179,6 +179,15 @@ func (conn *connection) WS() *websocket.Conn {
 	return conn.ws
 }
 
+// ConnectionFromContext extracts the connection from the context
+func ConnectionFromContext(ctx context.Context) Connection {
+	value := ctx.Value(ConnKey)
+	if conn, ok := value.(Connection); ok {
+		return conn
+	}
+	return nil
+}
+
 func (conn *connection) SendData(opID string, data *DataMessagePayload) {
 	msg := operationMessageForType(gqlData)
 	msg.ID = opID

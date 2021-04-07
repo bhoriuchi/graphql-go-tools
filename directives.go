@@ -93,7 +93,7 @@ func (c *registry) applyDirectives(config interface{}, directives []*ast.Directi
 			return err
 		}
 
-		args, err := getArgumentValues(directive.Args, def.Arguments, map[string]interface{}{})
+		args, err := GetArgumentValues(directive.Args, def.Arguments, map[string]interface{}{})
 		if err != nil {
 			return err
 		}

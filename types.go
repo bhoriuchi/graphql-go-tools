@@ -267,7 +267,9 @@ func (c *registry) buildFieldMapFromAST(fields []*ast.FieldDefinition, kind, typ
 	for _, fieldDef := range fieldDefs {
 		if _, ok := fieldMap[fieldDef.Name.Value]; !ok {
 			if field, err := c.buildFieldFromAST(fieldDef, kind, typeName, allowThunks); err == nil {
-				fieldMap[fieldDef.Name.Value] = field
+				if !isHiddenField(fieldDef) {
+					fieldMap[fieldDef.Name.Value] = field
+				}
 			} else {
 				return nil, err
 			}

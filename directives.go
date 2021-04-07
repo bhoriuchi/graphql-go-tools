@@ -5,6 +5,18 @@ import (
 	"github.com/graphql-go/graphql/language/ast"
 )
 
+const (
+	directiveHide = "hide"
+)
+
+// HideDirective hides a define field
+var HideDirective = graphql.NewDirective(graphql.DirectiveConfig{
+	Name:        directiveHide,
+	Description: "Hide a field, useful when generating types from the AST where the backend type has more fields than the graphql type",
+	Locations:   []string{graphql.DirectiveLocationFieldDefinition},
+	Args:        graphql.FieldConfigArgument{},
+})
+
 // SchemaDirectiveVisitor defines a schema visitor.
 // This attempts to provide similar functionality to Apollo graphql-tools
 // https://www.apollographql.com/docs/graphql-tools/schema-directives/

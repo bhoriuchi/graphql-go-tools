@@ -46,6 +46,7 @@ func newRegistry(
 			"include":    graphql.IncludeDirective,
 			"skip":       graphql.SkipDirective,
 			"deprecated": graphql.DeprecatedDirective,
+			"hide":       HideDirective,
 		},
 		resolverMap:      resolverMap{},
 		directiveMap:     directiveMap,

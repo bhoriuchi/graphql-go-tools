@@ -217,3 +217,15 @@ func GetPathFieldSubSelections(info graphql.ResolveInfo, field ...string) (names
 
 	return
 }
+
+// determines if a field is hidden
+func isHiddenField(field *ast.FieldDefinition) bool {
+	hide := false
+	for _, dir := range field.Directives {
+		if dir.Name.Value == directiveHide {
+			return true
+		}
+	}
+
+	return hide
+}

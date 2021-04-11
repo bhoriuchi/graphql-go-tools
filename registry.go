@@ -1,8 +1,10 @@
 package tools
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
@@ -13,6 +15,7 @@ var errUnresolvedDependencies = errors.New("unresolved dependencies")
 
 // registry the registry holds all of the types
 type registry struct {
+	ctx              context.Context
 	types            map[string]graphql.Type
 	directives       map[string]*graphql.Directive
 	schema           *graphql.Schema
@@ -28,12 +31,18 @@ type registry struct {
 
 // newRegistry creates a new registry
 func newRegistry(
+	ctx context.Context,
 	resolvers map[string]interface{},
 	directiveMap SchemaDirectiveVisitorMap,
 	extensions []graphql.Extension,
 	document *ast.Document,
 ) *registry {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	r := &registry{
+		ctx: ctx,
 		types: map[string]graphql.Type{
 			"ID":       graphql.ID,
 			"String":   graphql.String,
@@ -149,6 +158,10 @@ func (c *registry) getExtensions(name, kind string) []interface{} {
 func (c *registry) importResolver(name string, resolver interface{}) {
 	switch resolver.(type) {
 	case *graphql.Directive:
+		// allow @ to be prefixed to a directive in the event there is a type with the same
+		// name to allow both to be defined in the resolver map but strip it from the
+		// directive before adding it to the registry
+		name = strings.TrimLeft(name, "@")
 		if _, ok := c.directives[name]; !ok {
 			c.directives[name] = resolver.(*graphql.Directive)
 		}

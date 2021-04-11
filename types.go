@@ -22,7 +22,12 @@ func (c *registry) buildScalarFromAST(definition *ast.ScalarDefinition, allowThu
 		scalarConfig.Serialize = r.(*ScalarResolver).Serialize
 	}
 
-	if err := c.applyDirectives(&scalarConfig, definition.Directives, allowThunks); err != nil {
+	if err := c.applyDirectives(applyDirectiveParams{
+		config:      &scalarConfig,
+		directives:  definition.Directives,
+		node:        definition,
+		allowThunks: allowThunks,
+	}); err != nil {
 		return err
 	}
 
@@ -49,7 +54,12 @@ func (c *registry) buildEnumFromAST(definition *ast.EnumDefinition, allowThunks 
 		}
 	}
 
-	if err := c.applyDirectives(&enumConfig, definition.Directives, allowThunks); err != nil {
+	if err := c.applyDirectives(applyDirectiveParams{
+		config:      &enumConfig,
+		directives:  definition.Directives,
+		node:        definition,
+		allowThunks: allowThunks,
+	}); err != nil {
 		return err
 	}
 
@@ -73,7 +83,12 @@ func (c *registry) buildEnumValueFromAST(definition *ast.EnumValueDefinition, en
 		Description: getDescription(definition),
 	}
 
-	if err := c.applyDirectives(&valueConfig, definition.Directives, allowThunks); err != nil {
+	if err := c.applyDirectives(applyDirectiveParams{
+		config:      &valueConfig,
+		directives:  definition.Directives,
+		node:        definition,
+		allowThunks: allowThunks,
+	}); err != nil {
 		return nil, err
 	}
 
@@ -109,7 +124,12 @@ func (c *registry) buildInputObjectFromAST(definition *ast.InputObjectDefinition
 		inputConfig.Fields = fieldMap
 	}
 
-	if err := c.applyDirectives(&inputConfig, definition.Directives, allowThunks); err != nil {
+	if err := c.applyDirectives(applyDirectiveParams{
+		config:      &inputConfig,
+		directives:  definition.Directives,
+		node:        definition,
+		allowThunks: allowThunks,
+	}); err != nil {
 		return err
 	}
 
@@ -143,7 +163,12 @@ func (c *registry) buildInputObjectFieldFromAST(definition *ast.InputValueDefini
 		DefaultValue: getDefaultValue(definition),
 	}
 
-	if err := c.applyDirectives(&field, definition.Directives, allowThunks); err != nil {
+	if err := c.applyDirectives(applyDirectiveParams{
+		config:      &field,
+		directives:  definition.Directives,
+		node:        definition,
+		allowThunks: allowThunks,
+	}); err != nil {
 		return nil, err
 	}
 
@@ -221,7 +246,12 @@ func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition, allowThu
 		directiveDefs = append(directiveDefs, extDef.(*ast.ObjectDefinition).Directives...)
 	}
 
-	if err := c.applyDirectives(&objectConfig, directiveDefs, allowThunks); err != nil {
+	if err := c.applyDirectives(applyDirectiveParams{
+		config:      &objectConfig,
+		directives:  directiveDefs,
+		node:        definition,
+		allowThunks: allowThunks,
+	}); err != nil {
 		return err
 	}
 
@@ -310,7 +340,12 @@ func (c *registry) buildInterfaceFromAST(definition *ast.InterfaceDefinition, al
 		ifaceConfig.ResolveType = r.(*InterfaceResolver).ResolveType
 	}
 
-	if err := c.applyDirectives(&ifaceConfig, definition.Directives, allowThunks); err != nil {
+	if err := c.applyDirectives(applyDirectiveParams{
+		config:      &ifaceConfig,
+		directives:  definition.Directives,
+		node:        definition,
+		allowThunks: allowThunks,
+	}); err != nil {
 		return err
 	}
 
@@ -330,7 +365,12 @@ func (c *registry) buildArgFromAST(definition *ast.InputValueDefinition, allowTh
 		DefaultValue: getDefaultValue(definition),
 	}
 
-	if err := c.applyDirectives(&arg, definition.Directives, allowThunks); err != nil {
+	if err := c.applyDirectives(applyDirectiveParams{
+		config:      &arg,
+		directives:  definition.Directives,
+		node:        definition,
+		allowThunks: allowThunks,
+	}); err != nil {
 		return nil, err
 	}
 
@@ -362,7 +402,14 @@ func (c *registry) buildFieldFromAST(definition *ast.FieldDefinition, kind, type
 		}
 	}
 
-	if err := c.applyDirectives(&field, definition.Directives, allowThunks); err != nil {
+	if err := c.applyDirectives(applyDirectiveParams{
+		config:      &field,
+		directives:  definition.Directives,
+		node:        definition,
+		allowThunks: allowThunks,
+		parentName:  typeName,
+		parentKind:  kind,
+	}); err != nil {
 		return nil, err
 	}
 
@@ -401,7 +448,12 @@ func (c *registry) buildUnionFromAST(definition *ast.UnionDefinition, allowThunk
 		}
 	}
 
-	if err := c.applyDirectives(&unionConfig, definition.Directives, allowThunks); err != nil {
+	if err := c.applyDirectives(applyDirectiveParams{
+		config:      &unionConfig,
+		directives:  definition.Directives,
+		node:        definition,
+		allowThunks: allowThunks,
+	}); err != nil {
 		return err
 	}
 

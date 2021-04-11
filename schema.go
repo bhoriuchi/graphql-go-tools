@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"context"
+
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
 )
@@ -12,9 +14,14 @@ const (
 	DefaultRootSubscriptionName = "Subscription"
 )
 
-// MakeExecutableSchema is shorthand for ExecutableSchema{}.Make()
+// MakeExecutableSchema is shorthand for ExecutableSchema{}.Make(ctx context.Context)
 func MakeExecutableSchema(config ExecutableSchema) (graphql.Schema, error) {
-	return config.Make()
+	return config.Make(context.Background())
+}
+
+// MakeExecutableSchemaWithContext make a schema and supply a context
+func MakeExecutableSchemaWithContext(ctx context.Context, config ExecutableSchema) (graphql.Schema, error) {
+	return config.Make(ctx)
 }
 
 // ExecutableSchema configuration for making an executable schema
@@ -28,7 +35,7 @@ type ExecutableSchema struct {
 }
 
 // Make creates a graphql schema config, this struct maintains intact the types and does not require the use of a non empty Query
-func (c *ExecutableSchema) Make() (graphql.Schema, error) {
+func (c *ExecutableSchema) Make(ctx context.Context) (graphql.Schema, error) {
 	// combine the TypeDefs
 	document, err := c.ConcatenateTypeDefs()
 	if err != nil {
@@ -36,7 +43,7 @@ func (c *ExecutableSchema) Make() (graphql.Schema, error) {
 	}
 
 	// create a new registry
-	registry := newRegistry(c.Resolvers, c.SchemaDirectives, c.Extensions, document)
+	registry := newRegistry(ctx, c.Resolvers, c.SchemaDirectives, c.Extensions, document)
 
 	// resolve the document definitions
 	if err := registry.resolveDefinitions(); err != nil {
@@ -100,7 +107,12 @@ func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition, allowThu
 	}
 
 	// apply schema directives
-	if err := c.applyDirectives(&schemaConfig, definition.Directives, allowThunks); err != nil {
+	if err := c.applyDirectives(applyDirectiveParams{
+		config:      &schemaConfig,
+		directives:  definition.Directives,
+		node:        definition,
+		allowThunks: allowThunks,
+	}); err != nil {
 		return err
 	}
 

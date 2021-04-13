@@ -230,6 +230,27 @@ func isHiddenField(field *ast.FieldDefinition) bool {
 	return hide
 }
 
+// Merges object definitions
+func MergeExtensions(obj *ast.ObjectDefinition, extensions ...*ast.ObjectDefinition) *ast.ObjectDefinition {
+	merged := &ast.ObjectDefinition{
+		Kind:        obj.Kind,
+		Loc:         obj.Loc,
+		Name:        obj.Name,
+		Description: obj.Description,
+		Interfaces:  append([]*ast.Named{}, obj.Interfaces...),
+		Directives:  append([]*ast.Directive{}, obj.Directives...),
+		Fields:      append([]*ast.FieldDefinition{}, obj.Fields...),
+	}
+
+	for _, ext := range extensions {
+		merged.Interfaces = append(merged.Interfaces, ext.Interfaces...)
+		merged.Directives = append(merged.Directives, ext.Directives...)
+		merged.Fields = append(merged.Fields, ext.Fields...)
+	}
+
+	return merged
+}
+
 const IntrospectionQuery = `query IntrospectionQuery {
   __schema {
     queryType {

@@ -139,8 +139,8 @@ func (c *registry) setDirective(name string, graphqlDirective *graphql.Directive
 }
 
 // gets the extensions for the current type
-func (c *registry) getExtensions(name, kind string) []interface{} {
-	extensions := []interface{}{}
+func (c *registry) getExtensions(name, kind string) []*ast.ObjectDefinition {
+	extensions := []*ast.ObjectDefinition{}
 
 	for _, def := range c.document.Definitions {
 		if def.GetKind() == kinds.TypeExtensionDefinition {

@@ -237,18 +237,19 @@ func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition, allowThu
 		if objectConfig.Description != "" {
 			break
 		}
-		objectConfig.Description = getDescription(extDef.(*ast.ObjectDefinition))
+		objectConfig.Description = getDescription(extDef)
 	}
 
 	// create a combined directives array
 	directiveDefs := append([]*ast.Directive{}, definition.Directives...)
 	for _, extDef := range extensions {
-		directiveDefs = append(directiveDefs, extDef.(*ast.ObjectDefinition).Directives...)
+		directiveDefs = append(directiveDefs, extDef.Directives...)
 	}
 
 	if err := c.applyDirectives(applyDirectiveParams{
 		config:      &objectConfig,
 		directives:  directiveDefs,
+		extensions:  extensions,
 		node:        definition,
 		allowThunks: allowThunks,
 	}); err != nil {
@@ -259,14 +260,14 @@ func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition, allowThu
 	return nil
 }
 
-func (c *registry) buildInterfacesArrayFromAST(definition *ast.ObjectDefinition, extensions []interface{}, allowThunks bool) ([]*graphql.Interface, error) {
+func (c *registry) buildInterfacesArrayFromAST(definition *ast.ObjectDefinition, extensions []*ast.ObjectDefinition, allowThunks bool) ([]*graphql.Interface, error) {
 	imap := map[string]bool{}
 	ifaces := []*graphql.Interface{}
 
 	// build list of interfaces and append extensions
 	ifaceDefs := append([]*ast.Named{}, definition.Interfaces...)
 	for _, extDef := range extensions {
-		ifaceDefs = append(ifaceDefs, extDef.(*ast.ObjectDefinition).Interfaces...)
+		ifaceDefs = append(ifaceDefs, extDef.Interfaces...)
 	}
 
 	// add defined interfaces
@@ -284,13 +285,13 @@ func (c *registry) buildInterfacesArrayFromAST(definition *ast.ObjectDefinition,
 	return ifaces, nil
 }
 
-func (c *registry) buildFieldMapFromAST(fields []*ast.FieldDefinition, kind, typeName string, extensions []interface{}, allowThunks bool) (graphql.Fields, error) {
+func (c *registry) buildFieldMapFromAST(fields []*ast.FieldDefinition, kind, typeName string, extensions []*ast.ObjectDefinition, allowThunks bool) (graphql.Fields, error) {
 	fieldMap := graphql.Fields{}
 
 	// build list of fields and append extensions
 	fieldDefs := append([]*ast.FieldDefinition{}, fields...)
 	for _, extDef := range extensions {
-		fieldDefs = append(fieldDefs, extDef.(*ast.ObjectDefinition).Fields...)
+		fieldDefs = append(fieldDefs, extDef.Fields...)
 	}
 
 	// add defined fields
@@ -311,7 +312,7 @@ func (c *registry) buildFieldMapFromAST(fields []*ast.FieldDefinition, kind, typ
 
 // builds an interfacefrom ast
 func (c *registry) buildInterfaceFromAST(definition *ast.InterfaceDefinition, allowThunks bool) error {
-	extensions := []interface{}{}
+	extensions := []*ast.ObjectDefinition{}
 	name := definition.Name.Value
 	ifaceConfig := graphql.InterfaceConfig{
 		Name:        name,

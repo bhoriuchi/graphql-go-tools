@@ -54,10 +54,11 @@ type VisitScalarParams struct {
 
 // VisitObjectParams params
 type VisitObjectParams struct {
-	Context context.Context
-	Config  *graphql.ObjectConfig
-	Node    *ast.ObjectDefinition
-	Args    map[string]interface{}
+	Context    context.Context
+	Config     *graphql.ObjectConfig
+	Node       *ast.ObjectDefinition
+	Extensions []*ast.ObjectDefinition
+	Args       map[string]interface{}
 }
 
 // VisitFieldDefinitionParams params
@@ -171,6 +172,7 @@ type applyDirectiveParams struct {
 	config      interface{}
 	directives  []*ast.Directive
 	node        interface{}
+	extensions  []*ast.ObjectDefinition
 	allowThunks bool
 	parentName  string
 	parentKind  string
@@ -221,10 +223,11 @@ func (c *registry) applyDirectives(p applyDirectiveParams) error {
 		case *graphql.ObjectConfig:
 			if visitor.VisitObject != nil {
 				visitor.VisitObject(VisitObjectParams{
-					Context: c.ctx,
-					Config:  p.config.(*graphql.ObjectConfig),
-					Args:    args,
-					Node:    p.node.(*ast.ObjectDefinition),
+					Context:    c.ctx,
+					Config:     p.config.(*graphql.ObjectConfig),
+					Args:       args,
+					Node:       p.node.(*ast.ObjectDefinition),
+					Extensions: p.extensions,
 				})
 			}
 		case *graphql.Field:

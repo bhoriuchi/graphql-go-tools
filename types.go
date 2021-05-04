@@ -107,8 +107,7 @@ func (c *registry) buildInputObjectFromAST(definition *ast.InputObjectDefinition
 
 	// use thunks only when allowed
 	if allowThunks {
-		var fields graphql.InputObjectConfigFieldMapThunk
-		fields = func() graphql.InputObjectConfigFieldMap {
+		var fields graphql.InputObjectConfigFieldMapThunk = func() graphql.InputObjectConfigFieldMap {
 			fieldMap, err := c.buildInputObjectFieldMapFromAST(definition.Fields, allowThunks)
 			if err != nil {
 				return nil
@@ -186,8 +185,7 @@ func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition, allowThu
 
 	if allowThunks {
 		// get interfaces thunk
-		var ifaces graphql.InterfacesThunk
-		ifaces = func() []*graphql.Interface {
+		var ifaces graphql.InterfacesThunk = func() []*graphql.Interface {
 			ifaceArr, err := c.buildInterfacesArrayFromAST(definition, extensions, allowThunks)
 			if err != nil {
 				return nil
@@ -196,8 +194,7 @@ func (c *registry) buildObjectFromAST(definition *ast.ObjectDefinition, allowThu
 		}
 
 		// get fields thunk
-		var fields graphql.FieldsThunk
-		fields = func() graphql.Fields {
+		var fields graphql.FieldsThunk = func() graphql.Fields {
 			fieldMap, err := c.buildFieldMapFromAST(definition.Fields, definition.GetKind(), name, extensions, allowThunks)
 			if err != nil {
 				return nil
@@ -320,8 +317,7 @@ func (c *registry) buildInterfaceFromAST(definition *ast.InterfaceDefinition, al
 	}
 
 	if allowThunks {
-		var fields graphql.FieldsThunk
-		fields = func() graphql.Fields {
+		var fields graphql.FieldsThunk = func() graphql.Fields {
 			fieldMap, err := c.buildFieldMapFromAST(definition.Fields, definition.GetKind(), name, extensions, allowThunks)
 			if err != nil {
 				return nil
@@ -391,6 +387,7 @@ func (c *registry) buildFieldFromAST(definition *ast.FieldDefinition, kind, type
 		Type:        fieldType,
 		Args:        graphql.FieldConfigArgument{},
 		Resolve:     c.getFieldResolveFn(kind, typeName, definition.Name.Value),
+		Subscribe:   c.getFieldSubscribeFn(kind, typeName, definition.Name.Value),
 	}
 
 	for _, arg := range definition.Arguments {
@@ -433,9 +430,9 @@ func (c *registry) buildUnionFromAST(definition *ast.UnionDefinition, allowThunk
 			return err
 		}
 		if object != nil {
-			switch object.(type) {
+			switch o := object.(type) {
 			case *graphql.Object:
-				unionConfig.Types = append(unionConfig.Types, object.(*graphql.Object))
+				unionConfig.Types = append(unionConfig.Types, o)
 				continue
 			}
 		}

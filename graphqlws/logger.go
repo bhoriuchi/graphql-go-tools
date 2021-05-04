@@ -1,11 +1,15 @@
 package graphqlws
 
-import (
-	"github.com/sirupsen/logrus"
-)
-
-// NewLogger returns a beautiful logger that logs messages with a
-// given prefix (typically the name of a system component / subsystem).
-func NewLogger(prefix string) *logrus.Entry {
-	return logger.WithField("prefix", "graphqlws")
+type Logger interface {
+	Infof(format string, data ...interface{})
+	Debugf(format string, data ...interface{})
+	Errorf(format string, data ...interface{})
+	Warnf(format string, data ...interface{})
 }
+
+type noopLogger struct{}
+
+func (n *noopLogger) Infof(format string, data ...interface{})  {}
+func (n *noopLogger) Debugf(format string, data ...interface{}) {}
+func (n *noopLogger) Errorf(format string, data ...interface{}) {}
+func (n *noopLogger) Warnf(format string, data ...interface{})  {}

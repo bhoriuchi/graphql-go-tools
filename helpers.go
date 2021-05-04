@@ -29,7 +29,6 @@ func (c *registry) getFieldResolveFn(kind, typeName, fieldName string) graphql.F
 	return graphql.DefaultResolveFn
 }
 
-/*
 func (c *registry) getFieldSubscribeFn(kind, typeName, fieldName string) graphql.FieldResolveFn {
 	if r := c.getResolver(typeName); r != nil && kind == r.getKind() {
 		switch kind {
@@ -45,7 +44,6 @@ func (c *registry) getFieldSubscribeFn(kind, typeName, fieldName string) graphql
 	}
 	return nil
 }
-*/
 
 // Recursively builds a complex type
 func (c registry) buildComplexType(astType ast.Type) (graphql.Type, error) {
@@ -146,9 +144,8 @@ func unaliasedPathArray(set *ast.SelectionSet, remaining []interface{}, current 
 	}
 
 	for _, sel := range set.Selections {
-		switch sel.(type) {
+		switch field := sel.(type) {
 		case *ast.Field:
-			field := sel.(*ast.Field)
 			if field.Alias != nil && field.Alias.Value == remaining[0] {
 				return unaliasedPathArray(sel.GetSelectionSet(), remaining[1:], append(current, field.Name.Value))
 			} else if field.Name.Value == remaining[0] {
@@ -174,13 +171,11 @@ func GetPathFieldSubSelections(info graphql.ResolveInfo, field ...string) (names
 	// get any sub selections
 	for _, f := range field {
 		for _, sel := range fieldAST.GetSelectionSet().Selections {
-			switch sel.(type) {
+			switch fragment := sel.(type) {
 			case *ast.InlineFragment:
-				fragment := sel.(*ast.InlineFragment)
 				for _, ss := range fragment.GetSelectionSet().Selections {
-					switch ss.(type) {
+					switch subField := ss.(type) {
 					case *ast.Field:
-						subField := ss.(*ast.Field)
 						if subField.Name.Value == f {
 							fieldAST = subField
 							break
@@ -198,13 +193,11 @@ func GetPathFieldSubSelections(info graphql.ResolveInfo, field ...string) (names
 	}
 
 	for _, sel := range fieldAST.GetSelectionSet().Selections {
-		switch sel.(type) {
+		switch fragment := sel.(type) {
 		case *ast.InlineFragment:
-			fragment := sel.(*ast.InlineFragment)
 			for _, ss := range fragment.GetSelectionSet().Selections {
-				switch ss.(type) {
+				switch field := ss.(type) {
 				case *ast.Field:
-					field := ss.(*ast.Field)
 					names = append(names, field.Name.Value)
 				}
 			}

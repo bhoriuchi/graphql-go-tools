@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/asim/go-micro/v3/logger"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -99,6 +99,7 @@ type ConnectionEventHandlers struct {
 // ConnectionConfig defines the configuration parameters of a
 // GraphQL WebSocket connection.
 type ConnectionConfig struct {
+	Logger        Logger
 	Authenticate  AuthenticateFunc
 	EventHandlers ConnectionEventHandlers
 }
@@ -131,7 +132,7 @@ type connection struct {
 	id         string
 	ws         *websocket.Conn
 	config     ConnectionConfig
-	logger     *logrus.Entry
+	logger     Logger
 	outgoing   chan OperationMessage
 	closeMutex *sync.Mutex
 	closed     bool
@@ -153,16 +154,14 @@ func NewConnection(ws *websocket.Conn, config ConnectionConfig) Connection {
 	conn.ws = ws
 	conn.context = context.Background()
 	conn.config = config
-	conn.logger = NewLogger("connection/" + conn.id)
+	conn.logger = config.Logger
 	conn.closed = false
 	conn.closeMutex = &sync.Mutex{}
-
 	conn.outgoing = make(chan OperationMessage)
 
 	go conn.writeLoop()
 	go conn.readLoop()
-
-	conn.logger.Info("Created connection")
+	conn.logger.Infof("Created connection")
 
 	return conn
 }
@@ -204,6 +203,7 @@ func (conn *connection) sendOperationErrors(opID string, errs []error) {
 	if conn.closed {
 		return
 	}
+
 	msg := operationMessageForType(gqlError)
 	msg.ID = opID
 	msg.Payload = errs
@@ -211,6 +211,7 @@ func (conn *connection) sendOperationErrors(opID string, errs []error) {
 	if !conn.closed {
 		conn.outgoing <- msg
 	}
+
 	conn.closeMutex.Unlock()
 }
 
@@ -226,7 +227,7 @@ func (conn *connection) close() {
 		conn.config.EventHandlers.Close(conn)
 	}
 
-	conn.logger.Info("Closed connection")
+	conn.logger.Infof("closed connection")
 }
 
 func (conn *connection) writeLoop() {
@@ -236,30 +237,22 @@ func (conn *connection) writeLoop() {
 	defer conn.ws.Close()
 
 	for {
-		select {
-		// Take the next outgoing message from the channel
-		case msg, ok := <-conn.outgoing:
-			// Close the write loop when the outgoing messages channel is closed;
-			// this will close the connection
-			if !ok {
-				return
-			}
+		msg, ok := <-conn.outgoing
+		// Close the write loop when the outgoing messages channel is closed;
+		// this will close the connection
+		if !ok {
+			return
+		}
 
-			conn.logger.WithFields(logrus.Fields{
-				"msg": msg.String(),
-			}).Debug("Send message")
+		conn.logger.Debugf("send message: %s", msg.String())
+		conn.ws.SetWriteDeadline(time.Now().Add(writeTimeout))
 
-			conn.ws.SetWriteDeadline(time.Now().Add(writeTimeout))
-
-			// Send the message to the client; if this times out, the WebSocket
-			// connection will be corrupt, hence we need to close the write loop
-			// and the connection immediately
-			if err := conn.ws.WriteJSON(msg); err != nil {
-				conn.logger.WithFields(logrus.Fields{
-					"err": err,
-				}).Warn("Sending message failed")
-				return
-			}
+		// Send the message to the client; if this times out, the WebSocket
+		// connection will be corrupt, hence we need to close the write loop
+		// and the connection immediately
+		if err := conn.ws.WriteJSON(msg); err != nil {
+			conn.logger.Warnf("sending message failed: %s", err)
+			return
 		}
 	}
 }
@@ -267,7 +260,6 @@ func (conn *connection) writeLoop() {
 func (conn *connection) readLoop() {
 	// Close the WebSocket connection when leaving the read loop
 	defer conn.ws.Close()
-
 	conn.ws.SetReadLimit(readLimit)
 
 	for {
@@ -282,24 +274,19 @@ func (conn *connection) readLoop() {
 		// see https://github.com/gorilla/websocket/blob/master/conn.go#L924 for
 		// more information on why this is necessary
 		if err != nil {
-			conn.logger.WithFields(logrus.Fields{
-				"reason": err,
-			}).Warn("Closing connection")
+			conn.logger.Warnf("force closing connection: %s", err)
 			conn.close()
 			return
 		}
 
-		conn.logger.WithFields(logrus.Fields{
-			"id":   msg.ID,
-			"type": msg.Type,
-		}).Debug("Received message")
+		conn.logger.Debugf("received message (%s): %s", msg.ID, msg.Type)
 
 		switch msg.Type {
 		case gqlConnectionAuth:
 			data := map[string]interface{}{}
 			if err := json.Unmarshal(rawPayload, &data); err != nil {
 				logger.Debugf("Invalid %s data: %v", msg.Type, err)
-				conn.SendError(errors.New("Invalid GQL_CONNECTION_AUTH payload"))
+				conn.SendError(errors.New("invalid GQL_CONNECTION_AUTH payload"))
 			} else {
 				if conn.config.Authenticate != nil {
 					ctx, err := conn.config.Authenticate(data, conn)
@@ -318,7 +305,7 @@ func (conn *connection) readLoop() {
 			data := map[string]interface{}{}
 			if err := json.Unmarshal(rawPayload, &data); err != nil {
 				logger.Debugf("Invalid %s data: %v", msg.Type, err)
-				conn.SendError(errors.New("Invalid GQL_CONNECTION_INIT payload"))
+				conn.SendError(errors.New("invalid GQL_CONNECTION_INIT payload"))
 			} else {
 				if conn.config.Authenticate != nil {
 					ctx, err := conn.config.Authenticate(data, conn)
@@ -340,7 +327,7 @@ func (conn *connection) readLoop() {
 			if conn.config.EventHandlers.StartOperation != nil {
 				data := StartMessagePayload{}
 				if err := json.Unmarshal(rawPayload, &data); err != nil {
-					conn.SendError(errors.New("Invalid GQL_START payload"))
+					conn.SendError(errors.New("invalid GQL_START payload"))
 				} else {
 					errs := conn.config.EventHandlers.StartOperation(conn, msg.ID, &data)
 					if errs != nil {
@@ -358,7 +345,7 @@ func (conn *connection) readLoop() {
 		// When the GraphQL WS connection is terminated by the client,
 		// close the connection and close the read loop
 		case gqlConnectionTerminate:
-			conn.logger.Debug("Connection terminated by client")
+			conn.logger.Debugf("connection terminated by client")
 			conn.close()
 			return
 
@@ -366,9 +353,7 @@ func (conn *connection) readLoop() {
 		// a bug in our implementation; make this very obvious by logging
 		// an error
 		default:
-			conn.logger.WithFields(logrus.Fields{
-				"msg": msg.String(),
-			}).Error("Unhandled message")
+			conn.logger.Errorf("unhandled message: %s", msg.String())
 		}
 	}
 }

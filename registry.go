@@ -91,9 +91,9 @@ func (c *registry) getObject(name string) (*graphql.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	switch obj.(type) {
+	switch o := obj.(type) {
 	case *graphql.Object:
-		return obj.(*graphql.Object), nil
+		return o, nil
 	}
 	return nil, nil
 }
@@ -121,9 +121,11 @@ func (c *registry) getType(name string) (graphql.Type, error) {
 }
 
 // Set sets a graphql type in the registry
+/*
 func (c *registry) setType(name string, graphqlType graphql.Type) {
 	c.types[name] = graphqlType
 }
+*/
 
 // Get gets a directive from the registry
 func (c *registry) getDirective(name string) (*graphql.Directive, error) {
@@ -134,9 +136,11 @@ func (c *registry) getDirective(name string) (*graphql.Directive, error) {
 }
 
 // Set sets a graphql directive in the registry
+/*
 func (c *registry) setDirective(name string, graphqlDirective *graphql.Directive) {
 	c.directives[name] = graphqlDirective
 }
+*/
 
 // gets the extensions for the current type
 func (c *registry) getExtensions(name, kind string) []*ast.ObjectDefinition {
@@ -156,69 +160,69 @@ func (c *registry) getExtensions(name, kind string) []*ast.ObjectDefinition {
 
 // imports a resolver from an interface
 func (c *registry) importResolver(name string, resolver interface{}) {
-	switch resolver.(type) {
+	switch res := resolver.(type) {
 	case *graphql.Directive:
 		// allow @ to be prefixed to a directive in the event there is a type with the same
 		// name to allow both to be defined in the resolver map but strip it from the
 		// directive before adding it to the registry
 		name = strings.TrimLeft(name, "@")
 		if _, ok := c.directives[name]; !ok {
-			c.directives[name] = resolver.(*graphql.Directive)
+			c.directives[name] = res
 		}
 
 	case *graphql.InputObject:
 		if _, ok := c.types[name]; !ok {
-			c.types[name] = resolver.(*graphql.InputObject)
+			c.types[name] = res
 		}
 
 	case *graphql.Scalar:
 		if _, ok := c.types[name]; !ok {
-			c.types[name] = resolver.(*graphql.Scalar)
+			c.types[name] = res
 		}
 
 	case *graphql.Enum:
 		if _, ok := c.types[name]; !ok {
-			c.types[name] = resolver.(*graphql.Enum)
+			c.types[name] = res
 		}
 
 	case *graphql.Object:
 		if _, ok := c.types[name]; !ok {
-			c.types[name] = resolver.(*graphql.Object)
+			c.types[name] = res
 		}
 
 	case *graphql.Interface:
 		if _, ok := c.types[name]; !ok {
-			c.types[name] = resolver.(*graphql.Interface)
+			c.types[name] = res
 		}
 
 	case *graphql.Union:
 		if _, ok := c.types[name]; !ok {
-			c.types[name] = resolver.(*graphql.Union)
+			c.types[name] = res
 		}
 
 	case *ScalarResolver:
 		if _, ok := c.resolverMap[name]; !ok {
-			c.resolverMap[name] = resolver.(*ScalarResolver)
+			c.resolverMap[name] = res
 		}
 
 	case *EnumResolver:
 		if _, ok := c.resolverMap[name]; !ok {
-			c.resolverMap[name] = resolver.(*EnumResolver)
+			c.resolverMap[name] = res
 		}
 
 	case *ObjectResolver:
 		if _, ok := c.resolverMap[name]; !ok {
-			c.resolverMap[name] = resolver.(*ObjectResolver)
+			c.resolverMap[name] = res
 		}
 
 	case *InterfaceResolver:
 		if _, ok := c.resolverMap[name]; !ok {
-			c.resolverMap[name] = resolver.(*InterfaceResolver)
+			c.resolverMap[name] = res
 		}
 
 	case *UnionResolver:
 		if _, ok := c.resolverMap[name]; !ok {
-			c.resolverMap[name] = resolver.(*UnionResolver)
+			c.resolverMap[name] = res
 		}
 	}
 }

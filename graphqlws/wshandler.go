@@ -6,21 +6,14 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/graphql-go/graphql"
-	"github.com/sirupsen/logrus"
 )
-
-var logger = logrus.New()
 
 // ConnKey the connection key
 var ConnKey interface{} = "conn"
 
-// SetLogger sets the logger
-func SetLogger(externalLogger *logrus.Logger) {
-	logger = externalLogger
-}
-
 // HandlerConfig config
 type HandlerConfig struct {
+	Logger       Logger
 	Authenticate AuthenticateFunc
 	Schema       graphql.Schema
 	RootValue    map[string]interface{}
@@ -33,7 +26,13 @@ func NewHandler(config HandlerConfig) http.Handler {
 		Subprotocols: []string{"graphql-ws"},
 	}
 
-	var connections = make(map[string]map[string]chan *graphql.Result)
+	mgr := &ChanMgr{
+		conns: make(map[string]map[string]*ResultChan),
+	}
+
+	if config.Logger == nil {
+		config.Logger = &noopLogger{}
+	}
 
 	return http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
@@ -42,45 +41,32 @@ func NewHandler(config HandlerConfig) http.Handler {
 
 			// Bail out if the WebSocket connection could not be established
 			if err != nil {
-				logger.Warn("Failed to establish WebSocket connection", err)
+				config.Logger.Warnf("Failed to establish WebSocket connection", err)
 				return
 			}
 
 			// Close the connection early if it doesn't implement the graphql-ws protocol
 			if ws.Subprotocol() != "graphql-ws" {
-				logger.Warn("Connection does not implement the GraphQL WS protocol")
+				config.Logger.Warnf("Connection does not implement the GraphQL WS protocol")
 				ws.Close()
 				return
 			}
 
 			// Establish a GraphQL WebSocket connection
-			conn := NewConnection(ws, ConnectionConfig{
+			NewConnection(ws, ConnectionConfig{
 				Authenticate: config.Authenticate,
+				Logger:       config.Logger,
 				EventHandlers: ConnectionEventHandlers{
 					Close: func(conn Connection) {
-						logger.WithFields(logrus.Fields{
-							"conn": conn.ID(),
-						}).Debug("Closing connection")
-
-						for opID := range connections[conn.ID()] {
-							iterator, ok := connections[conn.ID()][opID]
-							if ok && iterator != nil {
-								close(connections[conn.ID()][opID])
-							}
-							delete(connections[conn.ID()], opID)
-						}
-
-						delete(connections, conn.ID())
+						config.Logger.Debugf("closing websocket: %s", conn.ID)
+						mgr.DelConn(conn.ID())
 					},
 					StartOperation: func(
 						conn Connection,
 						opID string,
 						data *StartMessagePayload,
 					) []error {
-						logger.WithFields(logrus.Fields{
-							"conn": conn.ID(),
-							"op":   opID,
-						}).Debug("Start operation")
+						config.Logger.Debugf("start operations %s on connection %s", opID, conn.ID())
 
 						ctx := context.WithValue(context.Background(), ConnKey, conn)
 						resultChannel := graphql.Subscribe(graphql.Params{
@@ -92,12 +78,13 @@ func NewHandler(config HandlerConfig) http.Handler {
 							RootObject:     config.RootValue,
 						})
 
-						connections[conn.ID()][opID] = resultChannel
+						mgr.Add(conn.ID(), opID, resultChannel)
 
 						go func() {
 							for {
 								select {
 								case <-ctx.Done():
+									mgr.Del(conn.ID(), opID)
 									return
 								case res, more := <-resultChannel:
 									if !more {
@@ -108,7 +95,7 @@ func NewHandler(config HandlerConfig) http.Handler {
 
 									if res.HasErrors() {
 										for _, err := range res.Errors {
-											logger.Debugf("SubscriptionError: %v", err)
+											config.Logger.Debugf("subscription_error: %v", err)
 											errs = append(errs, err.OriginalError())
 										}
 									}
@@ -124,21 +111,11 @@ func NewHandler(config HandlerConfig) http.Handler {
 						return nil
 					},
 					StopOperation: func(conn Connection, opID string) {
-						logger.WithFields(logrus.Fields{
-							"conn": conn.ID(),
-							"op":   opID,
-						}).Debug("Stop operation")
-
-						iterator, ok := connections[conn.ID()][opID]
-						if ok && iterator != nil {
-							close(connections[conn.ID()][opID])
-						}
-						delete(connections[conn.ID()], opID)
+						config.Logger.Debugf("stop operation %s on connection %s", opID, conn.ID())
+						mgr.Del(conn.ID(), opID)
 					},
 				},
 			})
-
-			connections[conn.ID()] = map[string]chan *graphql.Result{}
 		},
 	)
 }

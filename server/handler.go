@@ -167,7 +167,7 @@ func (s *Server) ContextHandler(ctx context.Context, w http.ResponseWriter, r *h
 	}
 }
 
-func (s *Server) WSHandler(rctx context.Context, w http.ResponseWriter, r *http.Request) {
+func (s *Server) WSHandler(ctx context.Context, w http.ResponseWriter, r *http.Request) {
 	// Establish a WebSocket connection
 	var ws, err = s.upgrader.Upgrade(w, r, nil)
 
@@ -178,78 +178,12 @@ func (s *Server) WSHandler(rctx context.Context, w http.ResponseWriter, r *http.
 	}
 
 	// Close the connection early if it doesn't implement the graphql-ws protocol
-	if ws.Subprotocol() != "graphql-ws" {
-		s.log.Warnf("Connection does not implement the GraphQL WS protocol")
-		ws.Close()
+	if ws.Subprotocol() == "graphql-ws" {
+		s.newGraphQLWSConnection(ctx, r, ws)
 		return
 	}
 
-	// Establish a GraphQL WebSocket connection
-	NewConnection(ws, ConnectionConfig{
-		Authenticate: s.options.WS.AuthenticateFunc,
-		Logger:       s.log,
-		EventHandlers: ConnectionEventHandlers{
-			Close: func(conn Connection) {
-				s.log.Debugf("closing websocket: %s", conn.ID)
-				s.mgr.DelConn(conn.ID())
-			},
-			StartOperation: func(
-				conn Connection,
-				opID string,
-				data *StartMessagePayload,
-			) []error {
-				s.log.Debugf("start operations %s on connection %s", opID, conn.ID())
-
-				rootObject := map[string]interface{}{}
-				if s.options.RootValueFunc != nil {
-					rootObject = s.options.RootValueFunc(rctx, r)
-				}
-				ctx := context.WithValue(context.Background(), ConnKey, conn)
-				resultChannel := graphql.Subscribe(graphql.Params{
-					Schema:         s.schema,
-					RequestString:  data.Query,
-					VariableValues: data.Variables,
-					OperationName:  data.OperationName,
-					Context:        ctx,
-					RootObject:     rootObject,
-				})
-
-				s.mgr.Add(conn.ID(), opID, resultChannel)
-
-				go func() {
-					for {
-						select {
-						case <-ctx.Done():
-							s.mgr.Del(conn.ID(), opID)
-							return
-						case res, more := <-resultChannel:
-							if !more {
-								return
-							}
-
-							errs := []error{}
-
-							if res.HasErrors() {
-								for _, err := range res.Errors {
-									s.log.Debugf("subscription_error: %v", err)
-									errs = append(errs, err.OriginalError())
-								}
-							}
-
-							conn.SendData(opID, &DataMessagePayload{
-								Data:   res.Data,
-								Errors: errs,
-							})
-						}
-					}
-				}()
-
-				return nil
-			},
-			StopOperation: func(conn Connection, opID string) {
-				s.log.Debugf("stop operation %s on connection %s", opID, conn.ID())
-				s.mgr.Del(conn.ID(), opID)
-			},
-		},
-	})
+	// TODO: support other popular protocols
+	s.log.Warnf("Connection does not implement the GraphQL WS protocol. Subprotocol: %s", ws.Subprotocol())
+	ws.Close()
 }

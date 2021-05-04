@@ -1,4 +1,4 @@
-package server
+package graphqlws
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bhoriuchi/graphql-go-tools/server/logger"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
@@ -98,7 +99,7 @@ type ConnectionEventHandlers struct {
 // ConnectionConfig defines the configuration parameters of a
 // GraphQL WebSocket connection.
 type ConnectionConfig struct {
-	Logger        Logger
+	Logger        logger.Logger
 	Authenticate  AuthenticateFunc
 	EventHandlers ConnectionEventHandlers
 }
@@ -131,7 +132,7 @@ type connection struct {
 	id         string
 	ws         *websocket.Conn
 	config     ConnectionConfig
-	logger     Logger
+	logger     logger.Logger
 	outgoing   chan OperationMessage
 	closeMutex *sync.Mutex
 	closed     bool

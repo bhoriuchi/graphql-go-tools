@@ -1,66 +1,3 @@
-package server
-
-import (
-	"fmt"
-	"html/template"
-	"net/http"
-)
-
-// PlaygroundVersion the default version to use
-var PlaygroundVersion = "1.7.27"
-
-type PlaygroundOptions struct {
-	Version string
-}
-
-func NewDefaultPlaygroundOptions() *PlaygroundOptions {
-	return &PlaygroundOptions{
-		Version: PlaygroundVersion,
-	}
-}
-
-type playgroundData struct {
-	PlaygroundVersion    string
-	Endpoint             string
-	SubscriptionEndpoint string
-	SetTitle             bool
-}
-
-// renderPlayground renders the Playground GUI
-func renderPlayground(config *PlaygroundOptions, w http.ResponseWriter, r *http.Request) {
-	t := template.New("Playground")
-	t, err := t.Parse(graphcoolPlaygroundTemplate)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	endpoint := r.URL.Path
-
-	wsScheme := "ws:"
-	if r.URL.Scheme == "https:" {
-		wsScheme = "wss:"
-	}
-
-	subscriptionEndpoint := fmt.Sprintf("%s//%v%s", wsScheme, r.Host, r.URL.Path)
-	version := PlaygroundVersion
-	if config.Version != "" {
-		version = config.Version
-	}
-
-	d := playgroundData{
-		PlaygroundVersion:    version,
-		Endpoint:             endpoint,
-		SubscriptionEndpoint: subscriptionEndpoint,
-		SetTitle:             true,
-	}
-	err = t.ExecuteTemplate(w, "index", d)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-const graphcoolPlaygroundTemplate = `
 {{ define "index" }}
 <!DOCTYPE html>
 
@@ -605,4 +542,3 @@ const graphcoolPlaygroundTemplate = `
 </body>
 </html>
 {{ end }}
-`

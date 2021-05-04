@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/bhoriuchi/graphql-go-tools/server/graphqlws"
+	"github.com/bhoriuchi/graphql-go-tools/server/logger"
 	"github.com/gorilla/websocket"
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/gqlerrors"
@@ -22,7 +24,7 @@ var ConnKey interface{} = "conn"
 
 type Server struct {
 	schema   graphql.Schema
-	log      Logger
+	log      logger.Logger
 	options  *Options
 	upgrader websocket.Upgrader
 	mgr      *ChanMgr
@@ -30,7 +32,7 @@ type Server struct {
 
 func New(schema graphql.Schema, options *Options) *Server {
 	if options.Logger == nil {
-		options.Logger = &noopLogger{}
+		options.Logger = &logger.NoopLogger{}
 	}
 
 	return &Server{
@@ -61,14 +63,14 @@ type Options struct {
 	FormatErrorFunc    FormatErrorFunc
 	ContextFunc        ContextFunc
 	ResultCallbackFunc ResultCallbackFunc
-	Logger             Logger
+	Logger             logger.Logger
 	WS                 *WSOptions
 	Playground         *PlaygroundOptions
 	GraphiQL           *GraphiQLOptions
 }
 
 type WSOptions struct {
-	AuthenticateFunc AuthenticateFunc
+	AuthenticateFunc graphqlws.AuthenticateFunc
 }
 
 func IsWSUpgrade(r *http.Request) bool {

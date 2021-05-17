@@ -244,7 +244,7 @@ func (conn *connection) writeLoop() {
 			return
 		}
 
-		conn.logger.Debugf("send message: %s", msg.String())
+		// conn.logger.Debugf("send message: %s", msg.String())
 		conn.ws.SetWriteDeadline(time.Now().Add(writeTimeout))
 
 		// Send the message to the client; if this times out, the WebSocket
@@ -279,13 +279,13 @@ func (conn *connection) readLoop() {
 			return
 		}
 
-		conn.logger.Debugf("received message (%s): %s", msg.ID, msg.Type)
+		// conn.logger.Debugf("received message (%s): %s", msg.ID, msg.Type)
 
 		switch msg.Type {
 		case gqlConnectionAuth:
 			data := map[string]interface{}{}
 			if err := json.Unmarshal(rawPayload, &data); err != nil {
-				conn.logger.Debugf("Invalid %s data: %v", msg.Type, err)
+				conn.logger.Errorf("Invalid %s data: %v", msg.Type, err)
 				conn.SendError(errors.New("invalid GQL_CONNECTION_AUTH payload"))
 			} else {
 				if conn.config.Authenticate != nil {
@@ -304,7 +304,7 @@ func (conn *connection) readLoop() {
 		case gqlConnectionInit:
 			data := map[string]interface{}{}
 			if err := json.Unmarshal(rawPayload, &data); err != nil {
-				conn.logger.Debugf("Invalid %s data: %v", msg.Type, err)
+				conn.logger.Errorf("Invalid %s data: %v", msg.Type, err)
 				conn.SendError(errors.New("invalid GQL_CONNECTION_INIT payload"))
 			} else {
 				if conn.config.Authenticate != nil {
@@ -345,7 +345,7 @@ func (conn *connection) readLoop() {
 		// When the GraphQL WS connection is terminated by the client,
 		// close the connection and close the read loop
 		case gqlConnectionTerminate:
-			conn.logger.Debugf("connection terminated by client")
+			// conn.logger.Debugf("connection terminated by client")
 			conn.close()
 			return
 

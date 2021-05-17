@@ -16,7 +16,7 @@ func (s *Server) newGraphQLWSConnection(ctx context.Context, r *http.Request, ws
 		Logger:       s.log,
 		EventHandlers: graphqlws.ConnectionEventHandlers{
 			Close: func(conn graphqlws.Connection) {
-				s.log.Debugf("closing websocket: %s", conn.ID)
+				s.log.Debugf("closing websocket: %s", conn.ID())
 				s.mgr.DelConn(conn.ID())
 			},
 			StartOperation: func(

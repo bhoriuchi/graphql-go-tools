@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io/ioutil"
@@ -91,6 +92,67 @@ func NewRequestOptions(r *http.Request) *RequestOptions {
 		if err != nil {
 			return &opts
 		}
+		err = json.Unmarshal(body, &opts)
+		if err != nil {
+			// Probably `variables` was sent as a string instead of an object.
+			// So, we try to be polite and try to parse that as a JSON string
+			var optsCompatible requestOptionsCompatibility
+			json.Unmarshal(body, &optsCompatible)
+			json.Unmarshal([]byte(optsCompatible.Variables), &opts.Variables)
+		}
+		return &opts
+	}
+}
+
+// GetRequestOptions Parses a http.Request into GraphQL request options struct without clearning the body
+func GetRequestOptions(r *http.Request) *RequestOptions {
+	if reqOpt := getFromForm(r.URL.Query()); reqOpt != nil {
+		return reqOpt
+	}
+
+	if r.Method != http.MethodPost {
+		return &RequestOptions{}
+	}
+
+	if r.Body == nil {
+		return &RequestOptions{}
+	}
+
+	// TODO: improve Content-Type handling
+	contentTypeStr := r.Header.Get("Content-Type")
+	contentTypeTokens := strings.Split(contentTypeStr, ";")
+	contentType := contentTypeTokens[0]
+
+	switch contentType {
+	case ContentTypeGraphQL:
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			return &RequestOptions{}
+		}
+		r.Body = ioutil.NopCloser(bytes.NewBuffer(body))
+		return &RequestOptions{
+			Query: string(body),
+		}
+	case ContentTypeFormURLEncoded:
+		if err := r.ParseForm(); err != nil {
+			return &RequestOptions{}
+		}
+
+		if reqOpt := getFromForm(r.PostForm); reqOpt != nil {
+			return reqOpt
+		}
+
+		return &RequestOptions{}
+
+	case ContentTypeJSON:
+		fallthrough
+	default:
+		var opts RequestOptions
+		body, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			return &opts
+		}
+		r.Body = ioutil.NopCloser(bytes.NewBuffer(body))
 		err = json.Unmarshal(body, &opts)
 		if err != nil {
 			// Probably `variables` was sent as a string instead of an object.

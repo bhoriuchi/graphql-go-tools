@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
@@ -16,6 +17,7 @@ var errUnresolvedDependencies = errors.New("unresolved dependencies")
 // registry the registry holds all of the types
 type registry struct {
 	ctx              context.Context
+	mx               sync.Mutex
 	types            map[string]graphql.Type
 	directives       map[string]*graphql.Directive
 	schema           *graphql.Schema
@@ -36,7 +38,7 @@ func newRegistry(
 	directiveMap SchemaDirectiveVisitorMap,
 	extensions []graphql.Extension,
 	document *ast.Document,
-) *registry {
+) (*registry, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -69,14 +71,19 @@ func newRegistry(
 
 	// import each resolver to the correct location
 	for name, resolver := range resolvers {
-		r.importResolver(name, resolver)
+		if err := r.importResolver(name, resolver); err != nil {
+			return nil, err
+		}
 	}
 
-	return r
+	return r, nil
 }
 
 // looks up a resolver by name or returns nil
 func (c *registry) getResolver(name string) Resolver {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+
 	if c.resolverMap != nil {
 		if resolver, ok := c.resolverMap[name]; ok {
 			return resolver
@@ -159,7 +166,10 @@ func (c *registry) getExtensions(name, kind string) []*ast.ObjectDefinition {
 }
 
 // imports a resolver from an interface
-func (c *registry) importResolver(name string, resolver interface{}) {
+func (c *registry) importResolver(name string, resolver interface{}) error {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+
 	switch res := resolver.(type) {
 	case *graphql.Directive:
 		// allow @ to be prefixed to a directive in the event there is a type with the same
@@ -224,7 +234,11 @@ func (c *registry) importResolver(name string, resolver interface{}) {
 		if _, ok := c.resolverMap[name]; !ok {
 			c.resolverMap[name] = res
 		}
+	default:
+		return fmt.Errorf("invalid resolver type for %s", name)
 	}
+
+	return nil
 }
 
 func getNodeName(node ast.Node) string {
@@ -268,7 +282,7 @@ func (c *registry) resolveDefinitions() error {
 
 	for len(c.unresolvedDefs) > 0 && c.iterations < c.maxIterations {
 		c.iterations = c.iterations + 1
-		allowThunks := c.iterations == c.maxIterations
+		allowThunks := c.iterations >= c.maxIterations-1
 
 		for _, definition := range c.unresolvedDefs {
 			switch nodeKind := definition.GetKind(); nodeKind {

@@ -43,7 +43,10 @@ func (c *ExecutableSchema) Make(ctx context.Context) (graphql.Schema, error) {
 	}
 
 	// create a new registry
-	registry := newRegistry(ctx, c.Resolvers, c.SchemaDirectives, c.Extensions, document)
+	registry, err := newRegistry(ctx, c.Resolvers, c.SchemaDirectives, c.Extensions, document)
+	if err != nil {
+		return graphql.Schema{}, err
+	}
 
 	// resolve the document definitions
 	if err := registry.resolveDefinitions(); err != nil {
@@ -56,12 +59,16 @@ func (c *ExecutableSchema) Make(ctx context.Context) (graphql.Schema, error) {
 	}
 
 	// otherwise build a schema from default object names
-	query, _ := registry.getObject(DefaultRootQueryName)
+	query, err := registry.getObject(DefaultRootQueryName)
+	if err != nil {
+		return graphql.Schema{}, err
+	}
+
 	mutation, _ := registry.getObject(DefaultRootMutationName)
 	subscription, _ := registry.getObject(DefaultRootSubscriptionName)
 
 	// create a new schema config
-	schemaConfig := graphql.SchemaConfig{
+	schemaConfig := &graphql.SchemaConfig{
 		Query:        query,
 		Mutation:     mutation,
 		Subscription: subscription,
@@ -71,12 +78,12 @@ func (c *ExecutableSchema) Make(ctx context.Context) (graphql.Schema, error) {
 	}
 
 	// create a new schema
-	return graphql.NewSchema(schemaConfig)
+	return graphql.NewSchema(*schemaConfig)
 }
 
 // build a schema from an ast
 func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition, allowThunks bool) error {
-	schemaConfig := graphql.SchemaConfig{
+	schemaConfig := &graphql.SchemaConfig{
 		Types:      c.typeArray(),
 		Directives: c.directiveArray(),
 		Extensions: c.extensions,
@@ -108,7 +115,7 @@ func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition, allowThu
 
 	// apply schema directives
 	if err := c.applyDirectives(applyDirectiveParams{
-		config:      &schemaConfig,
+		config:      schemaConfig,
 		directives:  definition.Directives,
 		node:        definition,
 		allowThunks: allowThunks,
@@ -117,7 +124,7 @@ func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition, allowThu
 	}
 
 	// build the schema
-	schema, err := graphql.NewSchema(schemaConfig)
+	schema, err := graphql.NewSchema(*schemaConfig)
 	if err != nil {
 		return err
 	}

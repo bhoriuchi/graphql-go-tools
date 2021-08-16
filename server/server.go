@@ -53,7 +53,7 @@ type RootValueFunc func(ctx context.Context, r *http.Request) map[string]interfa
 
 type FormatErrorFunc func(err error) gqlerrors.FormattedError
 
-type ContextFunc func(ctx context.Context) context.Context
+type ContextFunc func(r *http.Request) context.Context
 
 type ResultCallbackFunc func(ctx context.Context, params *graphql.Params, result *graphql.Result, responseBody []byte)
 
@@ -62,6 +62,7 @@ type Options struct {
 	RootValueFunc      RootValueFunc
 	FormatErrorFunc    FormatErrorFunc
 	ContextFunc        ContextFunc
+	WSContextFunc      ContextFunc
 	ResultCallbackFunc ResultCallbackFunc
 	Logger             logger.Logger
 	WS                 *WSOptions
@@ -83,8 +84,16 @@ func IsWSUpgrade(r *http.Request) bool {
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if IsWSUpgrade(r) {
 		s.log.Debugf("Upgrading connection to websocket")
-		s.WSHandler(r.Context(), w, r)
+		ctx := r.Context()
+		if s.options.WSContextFunc != nil {
+			ctx = s.options.WSContextFunc(r)
+		}
+		s.WSHandler(ctx, w, r)
 	} else {
-		s.ContextHandler(r.Context(), w, r)
+		ctx := r.Context()
+		if s.options.ContextFunc != nil {
+			ctx = s.options.ContextFunc(r)
+		}
+		s.ContextHandler(ctx, w, r)
 	}
 }

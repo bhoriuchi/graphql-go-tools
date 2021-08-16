@@ -46,7 +46,7 @@ func (c *registry) getFieldSubscribeFn(kind, typeName, fieldName string) graphql
 }
 
 // Recursively builds a complex type
-func (c registry) buildComplexType(astType ast.Type) (graphql.Type, error) {
+func (c *registry) buildComplexType(astType ast.Type) (graphql.Type, error) {
 	switch kind := astType.GetKind(); kind {
 	case kinds.List:
 		t, err := c.buildComplexType(astType.(*ast.List).Type)

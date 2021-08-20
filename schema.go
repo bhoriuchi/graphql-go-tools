@@ -2,6 +2,8 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
@@ -48,6 +50,8 @@ func (c *ExecutableSchema) Make(ctx context.Context) (graphql.Schema, error) {
 		return graphql.Schema{}, err
 	}
 
+	registry.dependencyMap = registry.IdentifyDependencies()
+
 	// resolve the document definitions
 	if err := registry.resolveDefinitions(); err != nil {
 		return graphql.Schema{}, err
@@ -77,8 +81,14 @@ func (c *ExecutableSchema) Make(ctx context.Context) (graphql.Schema, error) {
 		Extensions:   c.Extensions,
 	}
 
+	schema, err := graphql.NewSchema(*schemaConfig)
+	if err != nil {
+		j, _ := json.MarshalIndent(registry.dependencyMap, "", "  ")
+		fmt.Println(string(j))
+	}
+
 	// create a new schema
-	return graphql.NewSchema(*schemaConfig)
+	return schema, nil
 }
 
 // build a schema from an ast

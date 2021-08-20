@@ -29,6 +29,7 @@ type registry struct {
 	unresolvedDefs   []ast.Node
 	maxIterations    int
 	iterations       int
+	dependencyMap    DependencyMap
 }
 
 // newRegistry creates a new registry

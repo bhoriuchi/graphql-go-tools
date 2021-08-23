@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/asim/go-micro/v3/logger"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
@@ -285,7 +284,7 @@ func (conn *connection) readLoop() {
 		case gqlConnectionAuth:
 			data := map[string]interface{}{}
 			if err := json.Unmarshal(rawPayload, &data); err != nil {
-				logger.Debugf("Invalid %s data: %v", msg.Type, err)
+				conn.logger.Debugf("Invalid %s data: %v", msg.Type, err)
 				conn.SendError(errors.New("invalid GQL_CONNECTION_AUTH payload"))
 			} else {
 				if conn.config.Authenticate != nil {
@@ -304,7 +303,7 @@ func (conn *connection) readLoop() {
 		case gqlConnectionInit:
 			data := map[string]interface{}{}
 			if err := json.Unmarshal(rawPayload, &data); err != nil {
-				logger.Debugf("Invalid %s data: %v", msg.Type, err)
+				conn.logger.Debugf("Invalid %s data: %v", msg.Type, err)
 				conn.SendError(errors.New("invalid GQL_CONNECTION_INIT payload"))
 			} else {
 				if conn.config.Authenticate != nil {

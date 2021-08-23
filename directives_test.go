@@ -24,7 +24,7 @@ type Query {
 
 	// create some data
 	foos := []map[string]interface{}{
-		map[string]interface{}{
+		{
 			"name":        "foo",
 			"description": "a foo",
 		},
@@ -36,24 +36,26 @@ type Query {
 		Resolvers: ResolverMap{
 			"Query": &ObjectResolver{
 				Fields: FieldResolveMap{
-					"foos": func(p graphql.ResolveParams) (interface{}, error) {
-						return foos, nil
+					"foos": &FieldResolve{
+						Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+							return foos, nil
+						},
 					},
 				},
 			},
 		},
 		SchemaDirectives: SchemaDirectiveVisitorMap{
 			"test": &SchemaDirectiveVisitor{
-				VisitFieldDefinition: func(field *graphql.Field, args map[string]interface{}) {
-					resolveFunc := field.Resolve
-					field.Resolve = func(p graphql.ResolveParams) (interface{}, error) {
+				VisitFieldDefinition: func(v VisitFieldDefinitionParams) {
+					resolveFunc := v.Config.Resolve
+					v.Config.Resolve = func(p graphql.ResolveParams) (interface{}, error) {
 						result, err := resolveFunc(p)
 						if err != nil {
 							return result, err
 						}
 						res := result.([]map[string]interface{})
 						res0 := res[0]
-						res0["description"] = args["message"]
+						res0["description"] = v.Args["message"]
 						return res, nil
 					}
 				},

@@ -6,6 +6,106 @@ import (
 	"github.com/graphql-go/graphql"
 )
 
+func TestInterface(t *testing.T) {
+	typeDefs := `
+interface User {
+	id: ID
+	type: String
+	name: String
+}
+
+type UserAccount implements User {
+	id: ID
+	type: String
+	name: String
+	username: String
+}
+
+type ServiceAccount implements User {
+	id: ID
+	type: String
+	name: String
+	client_id: String
+}
+
+type Query {
+	users: [User]
+}
+`
+	users := []map[string]interface{}{
+		{
+			"id":       "1",
+			"type":     "user",
+			"name":     "User1",
+			"username": "user1",
+		},
+		{
+			"id":        "1",
+			"type":      "service",
+			"name":      "Service1",
+			"client_id": "1234567890",
+		},
+	}
+
+	schema, err := MakeExecutableSchema(ExecutableSchema{
+		TypeDefs: typeDefs,
+		Resolvers: map[string]interface{}{
+			"User": &InterfaceResolver{
+				ResolveType: func(p graphql.ResolveTypeParams) *graphql.Object {
+					value := p.Value.(map[string]interface{})
+					typ := value["type"].(string)
+					if typ == "user" {
+						return p.Info.Schema.Type("UserAccount").(*graphql.Object)
+					} else if typ == "service" {
+						return p.Info.Schema.Type("ServiceAccount").(*graphql.Object)
+					}
+
+					return nil
+				},
+			},
+			"Query": &ObjectResolver{
+				Fields: FieldResolveMap{
+					"users": &FieldResolve{
+						Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+							return users, nil
+						},
+					},
+				},
+			},
+		},
+	})
+
+	if err != nil {
+		t.Errorf("failed to make schema: %v", err)
+		return
+	}
+
+	r := graphql.Do(graphql.Params{
+		Schema: schema,
+		RequestString: `query {
+			users {
+				id
+				type
+				name
+				... on UserAccount {
+					username
+				}
+				... on ServiceAccount {
+					client_id
+				}
+			}
+		}`,
+	})
+
+	if r.HasErrors() {
+		t.Error(r.Errors)
+		return
+	}
+
+	// j, _ := json.MarshalIndent(r.Data, "", "  ")
+	// fmt.Printf("%s\n", j)
+}
+
 func TestMissingType(t *testing.T) {
 	typeDefs := `
 type Foo {
@@ -24,7 +124,7 @@ type Query {
 
 	// create some data
 	foos := []map[string]interface{}{
-		map[string]interface{}{
+		{
 			"name": "foo",
 			"meta": map[string]interface{}{
 				"bar": "baz",
@@ -35,19 +135,21 @@ type Query {
 	// make the schema
 	_, err := MakeExecutableSchema(ExecutableSchema{
 		TypeDefs: typeDefs,
-		Resolvers: ResolverMap{
+		Resolvers: map[string]interface{}{
 			"Query": &ObjectResolver{
 				Fields: FieldResolveMap{
-					"foos": func(p graphql.ResolveParams) (interface{}, error) {
-						return foos, nil
+					"foos": &FieldResolve{
+						Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+							return foos, nil
+						},
 					},
 				},
 			},
 		},
 	})
 
-	if err == nil {
-		t.Error("expected undefined type error")
+	if err != nil {
+		t.Error("failed to use tunks for cyclic type")
 		return
 	}
 }
@@ -72,7 +174,7 @@ schema {
 
 	// create some data
 	foos := []map[string]interface{}{
-		map[string]interface{}{
+		{
 			"name":        "foo",
 			"description": "a foo",
 		},
@@ -81,11 +183,13 @@ schema {
 	// make the schema
 	schema, err := MakeExecutableSchema(ExecutableSchema{
 		TypeDefs: typeDefs,
-		Resolvers: ResolverMap{
+		Resolvers: map[string]interface{}{
 			"Query": &ObjectResolver{
 				Fields: FieldResolveMap{
-					"foos": func(p graphql.ResolveParams) (interface{}, error) {
-						return foos, nil
+					"foos": &FieldResolve{
+						Resolve: func(p graphql.ResolveParams) (interface{}, error) {
+							return foos, nil
+						},
 					},
 				},
 			},
@@ -111,38 +215,5 @@ schema {
 	if r.HasErrors() {
 		t.Error(r.Errors)
 		return
-	}
-}
-
-func TestMakeSchemaConfig(t *testing.T) {
-	typeDefs := `
-type Foo {
-	name: String!
-	description: String
-}
-`
-	// make the schema
-	config := ExecutableSchema{
-		TypeDefs: typeDefs,
-	}
-	schemaConfig, err := config.MakeSchemaConfig()
-
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	objects := 0
-	for _, gqlType := range schemaConfig.Types {
-		_, err := gqlType.(*graphql.Object)
-		if !err {
-			continue
-		}
-		objects++
-		// for k, field := range obj.Fields() {
-		// 	println(k, field.Type.Name())
-		// }
-	}
-	if objects != 1 {
-		t.Error("MakeSchemaConfig does not maintain schema types")
 	}
 }

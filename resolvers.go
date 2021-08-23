@@ -10,11 +10,21 @@ type Resolver interface {
 	getKind() string
 }
 
-// ResolverMap a map of resolver configurations
-type ResolverMap map[string]Resolver
+// ResolverMap a map of resolver configurations.
+// Accept generic interfaces and identify types at build
+type ResolverMap map[string]interface{}
+
+// internal resolver map
+type resolverMap map[string]Resolver
 
 // FieldResolveMap map of field resolve functions
-type FieldResolveMap map[string]graphql.FieldResolveFn
+type FieldResolveMap map[string]*FieldResolve
+
+// FieldResolve field resolver
+type FieldResolve struct {
+	Resolve   graphql.FieldResolveFn
+	Subscribe graphql.FieldResolveFn
+}
 
 // ObjectResolver config for object resolver map
 type ObjectResolver struct {

@@ -18,19 +18,35 @@ func (c *registry) getFieldResolveFn(kind, typeName, fieldName string) graphql.F
 		switch kind {
 		case kinds.ObjectDefinition:
 			if fn, ok := r.(*ObjectResolver).Fields[fieldName]; ok {
-				return fn
+				return fn.Resolve
 			}
 		case kinds.InterfaceDefinition:
 			if fn, ok := r.(*InterfaceResolver).Fields[fieldName]; ok {
-				return fn
+				return fn.Resolve
 			}
 		}
 	}
 	return graphql.DefaultResolveFn
 }
 
+func (c *registry) getFieldSubscribeFn(kind, typeName, fieldName string) graphql.FieldResolveFn {
+	if r := c.getResolver(typeName); r != nil && kind == r.getKind() {
+		switch kind {
+		case kinds.ObjectDefinition:
+			if fieldResolve, ok := r.(*ObjectResolver).Fields[fieldName]; ok {
+				return fieldResolve.Subscribe
+			}
+		case kinds.InterfaceDefinition:
+			if fieldResolve, ok := r.(*InterfaceResolver).Fields[fieldName]; ok {
+				return fieldResolve.Subscribe
+			}
+		}
+	}
+	return nil
+}
+
 // Recursively builds a complex type
-func (c registry) buildComplexType(astType ast.Type) (graphql.Type, error) {
+func (c *registry) buildComplexType(astType ast.Type) (graphql.Type, error) {
 	switch kind := astType.GetKind(); kind {
 	case kinds.List:
 		t, err := c.buildComplexType(astType.(*ast.List).Type)
@@ -128,9 +144,8 @@ func unaliasedPathArray(set *ast.SelectionSet, remaining []interface{}, current 
 	}
 
 	for _, sel := range set.Selections {
-		switch sel.(type) {
+		switch field := sel.(type) {
 		case *ast.Field:
-			field := sel.(*ast.Field)
 			if field.Alias != nil && field.Alias.Value == remaining[0] {
 				return unaliasedPathArray(sel.GetSelectionSet(), remaining[1:], append(current, field.Name.Value))
 			} else if field.Name.Value == remaining[0] {
@@ -140,3 +155,191 @@ func unaliasedPathArray(set *ast.SelectionSet, remaining []interface{}, current 
 	}
 	return current
 }
+
+// GetPathFieldSubSelections gets the subselectiond for a path
+func GetPathFieldSubSelections(info graphql.ResolveInfo, field ...string) (names []string, err error) {
+	names = []string{}
+	if len(info.FieldASTs) == 0 {
+		return
+	}
+
+	fieldAST := info.FieldASTs[0]
+	if fieldAST.GetSelectionSet() == nil {
+		return
+	}
+
+	// get any sub selections
+	for _, f := range field {
+		for _, sel := range fieldAST.GetSelectionSet().Selections {
+			switch fragment := sel.(type) {
+			case *ast.InlineFragment:
+				for _, ss := range fragment.GetSelectionSet().Selections {
+					switch subField := ss.(type) {
+					case *ast.Field:
+						if subField.Name.Value == f {
+							fieldAST = subField
+							break
+						}
+					}
+				}
+			case *ast.Field:
+				subField := sel.(*ast.Field)
+				if subField.Name.Value == f {
+					fieldAST = subField
+					continue
+				}
+			}
+		}
+	}
+
+	for _, sel := range fieldAST.GetSelectionSet().Selections {
+		switch fragment := sel.(type) {
+		case *ast.InlineFragment:
+			for _, ss := range fragment.GetSelectionSet().Selections {
+				switch field := ss.(type) {
+				case *ast.Field:
+					names = append(names, field.Name.Value)
+				}
+			}
+
+		case *ast.Field:
+			field := sel.(*ast.Field)
+			names = append(names, field.Name.Value)
+		}
+	}
+
+	return
+}
+
+// determines if a field is hidden
+func isHiddenField(field *ast.FieldDefinition) bool {
+	hide := false
+	for _, dir := range field.Directives {
+		if dir.Name.Value == directiveHide {
+			return true
+		}
+	}
+
+	return hide
+}
+
+// Merges object definitions
+func MergeExtensions(obj *ast.ObjectDefinition, extensions ...*ast.ObjectDefinition) *ast.ObjectDefinition {
+	merged := &ast.ObjectDefinition{
+		Kind:        obj.Kind,
+		Loc:         obj.Loc,
+		Name:        obj.Name,
+		Description: obj.Description,
+		Interfaces:  append([]*ast.Named{}, obj.Interfaces...),
+		Directives:  append([]*ast.Directive{}, obj.Directives...),
+		Fields:      append([]*ast.FieldDefinition{}, obj.Fields...),
+	}
+
+	for _, ext := range extensions {
+		merged.Interfaces = append(merged.Interfaces, ext.Interfaces...)
+		merged.Directives = append(merged.Directives, ext.Directives...)
+		merged.Fields = append(merged.Fields, ext.Fields...)
+	}
+
+	return merged
+}
+
+const IntrospectionQuery = `query IntrospectionQuery {
+  __schema {
+    queryType {
+      name
+    }
+    mutationType {
+      name
+    }
+    subscriptionType {
+      name
+    }
+    types {
+      ...FullType
+    }
+    directives {
+      name
+      description
+      locations
+      args {
+        ...InputValue
+      }
+    }
+  }
+}
+
+fragment FullType on __Type {
+  kind
+  name
+  description
+  fields(includeDeprecated: true) {
+    name
+    description
+    args {
+      ...InputValue
+    }
+    type {
+      ...TypeRef
+    }
+    isDeprecated
+    deprecationReason
+  }
+  inputFields {
+    ...InputValue
+  }
+  interfaces {
+    ...TypeRef
+  }
+  enumValues(includeDeprecated: true) {
+    name
+    description
+    isDeprecated
+    deprecationReason
+  }
+  possibleTypes {
+    ...TypeRef
+  }
+}
+
+fragment InputValue on __InputValue {
+  name
+  description
+  type {
+    ...TypeRef
+  }
+  defaultValue
+}
+
+fragment TypeRef on __Type {
+  kind
+  name
+  ofType {
+    kind
+    name
+    ofType {
+      kind
+      name
+      ofType {
+        kind
+        name
+        ofType {
+          kind
+          name
+          ofType {
+            kind
+            name
+            ofType {
+              kind
+              name
+              ofType {
+                kind
+                name
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`

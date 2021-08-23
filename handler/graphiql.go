@@ -107,7 +107,7 @@ func renderGraphiQL(config *GraphiQLConfig, w http.ResponseWriter, r *http.Reque
 }
 
 // GraphiqlVersion is the current version of GraphiQL
-const GraphiqlVersion = "0.13.2"
+var GraphiqlVersion = "0.13.2"
 
 const graphiqlTemplate = `
 {{ define "index" }}

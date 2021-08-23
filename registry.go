@@ -1,8 +1,10 @@
 package tools
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
@@ -13,11 +15,11 @@ var errUnresolvedDependencies = errors.New("unresolved dependencies")
 
 // registry the registry holds all of the types
 type registry struct {
+	ctx              context.Context
 	types            map[string]graphql.Type
 	directives       map[string]*graphql.Directive
 	schema           *graphql.Schema
-	schemaConfig     *graphql.SchemaConfig
-	resolverMap      ResolverMap
+	resolverMap      resolverMap
 	directiveMap     SchemaDirectiveVisitorMap
 	schemaDirectives []*ast.Directive
 	document         *ast.Document
@@ -25,16 +27,23 @@ type registry struct {
 	unresolvedDefs   []ast.Node
 	maxIterations    int
 	iterations       int
+	dependencyMap    DependencyMap
 }
 
 // newRegistry creates a new registry
 func newRegistry(
-	resolvers map[string]Resolver,
+	ctx context.Context,
+	resolvers map[string]interface{},
 	directiveMap SchemaDirectiveVisitorMap,
 	extensions []graphql.Extension,
 	document *ast.Document,
-) *registry {
+) (*registry, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	r := &registry{
+		ctx: ctx,
 		types: map[string]graphql.Type{
 			"ID":       graphql.ID,
 			"String":   graphql.String,
@@ -47,8 +56,9 @@ func newRegistry(
 			"include":    graphql.IncludeDirective,
 			"skip":       graphql.SkipDirective,
 			"deprecated": graphql.DeprecatedDirective,
+			"hide":       HideDirective,
 		},
-		resolverMap:      ResolverMap{},
+		resolverMap:      resolverMap{},
 		directiveMap:     directiveMap,
 		schemaDirectives: []*ast.Directive{},
 		document:         document,
@@ -60,10 +70,12 @@ func newRegistry(
 
 	// import each resolver to the correct location
 	for name, resolver := range resolvers {
-		r.importResolver(name, resolver)
+		if err := r.importResolver(name, resolver); err != nil {
+			return nil, err
+		}
 	}
 
-	return r
+	return r, nil
 }
 
 // looks up a resolver by name or returns nil
@@ -82,9 +94,9 @@ func (c *registry) getObject(name string) (*graphql.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	switch obj.(type) {
+	switch o := obj.(type) {
 	case *graphql.Object:
-		return obj.(*graphql.Object), nil
+		return o, nil
 	}
 	return nil, nil
 }
@@ -111,11 +123,6 @@ func (c *registry) getType(name string) (graphql.Type, error) {
 	return nil, errUnresolvedDependencies
 }
 
-// Set sets a graphql type in the registry
-func (c *registry) setType(name string, graphqlType graphql.Type) {
-	c.types[name] = graphqlType
-}
-
 // Get gets a directive from the registry
 func (c *registry) getDirective(name string) (*graphql.Directive, error) {
 	if val, ok := c.directives[name]; ok {
@@ -124,14 +131,9 @@ func (c *registry) getDirective(name string) (*graphql.Directive, error) {
 	return nil, errUnresolvedDependencies
 }
 
-// Set sets a graphql directive in the registry
-func (c *registry) setDirective(name string, graphqlDirective *graphql.Directive) {
-	c.directives[name] = graphqlDirective
-}
-
 // gets the extensions for the current type
-func (c *registry) getExtensions(name, kind string) []interface{} {
-	extensions := []interface{}{}
+func (c *registry) getExtensions(name, kind string) []*ast.ObjectDefinition {
+	extensions := []*ast.ObjectDefinition{}
 
 	for _, def := range c.document.Definitions {
 		if def.GetKind() == kinds.TypeExtensionDefinition {
@@ -146,68 +148,76 @@ func (c *registry) getExtensions(name, kind string) []interface{} {
 }
 
 // imports a resolver from an interface
-func (c *registry) importResolver(name string, resolver interface{}) {
-	switch resolver.(type) {
+func (c *registry) importResolver(name string, resolver interface{}) error {
+	switch res := resolver.(type) {
 	case *graphql.Directive:
+		// allow @ to be prefixed to a directive in the event there is a type with the same
+		// name to allow both to be defined in the resolver map but strip it from the
+		// directive before adding it to the registry
+		name = strings.TrimLeft(name, "@")
 		if _, ok := c.directives[name]; !ok {
-			c.directives[name] = resolver.(*graphql.Directive)
+			c.directives[name] = res
 		}
 
 	case *graphql.InputObject:
 		if _, ok := c.types[name]; !ok {
-			c.types[name] = resolver.(*graphql.InputObject)
+			c.types[name] = res
 		}
 
 	case *graphql.Scalar:
 		if _, ok := c.types[name]; !ok {
-			c.types[name] = resolver.(*graphql.Scalar)
+			c.types[name] = res
 		}
 
 	case *graphql.Enum:
 		if _, ok := c.types[name]; !ok {
-			c.types[name] = resolver.(*graphql.Enum)
+			c.types[name] = res
 		}
 
 	case *graphql.Object:
 		if _, ok := c.types[name]; !ok {
-			c.types[name] = resolver.(*graphql.Object)
+			c.types[name] = res
 		}
 
 	case *graphql.Interface:
 		if _, ok := c.types[name]; !ok {
-			c.types[name] = resolver.(*graphql.Interface)
+			c.types[name] = res
 		}
 
 	case *graphql.Union:
 		if _, ok := c.types[name]; !ok {
-			c.types[name] = resolver.(*graphql.Union)
+			c.types[name] = res
 		}
 
 	case *ScalarResolver:
 		if _, ok := c.resolverMap[name]; !ok {
-			c.resolverMap[name] = resolver.(*ScalarResolver)
+			c.resolverMap[name] = res
 		}
 
 	case *EnumResolver:
 		if _, ok := c.resolverMap[name]; !ok {
-			c.resolverMap[name] = resolver.(*EnumResolver)
+			c.resolverMap[name] = res
 		}
 
 	case *ObjectResolver:
 		if _, ok := c.resolverMap[name]; !ok {
-			c.resolverMap[name] = resolver.(*ObjectResolver)
+			c.resolverMap[name] = res
 		}
 
 	case *InterfaceResolver:
 		if _, ok := c.resolverMap[name]; !ok {
-			c.resolverMap[name] = resolver.(*InterfaceResolver)
+			c.resolverMap[name] = res
 		}
 
 	case *UnionResolver:
 		if _, ok := c.resolverMap[name]; !ok {
-			c.resolverMap[name] = resolver.(*UnionResolver)
+			c.resolverMap[name] = res
 		}
+	default:
+		return fmt.Errorf("invalid resolver type for %s", name)
 	}
+
+	return nil
 }
 
 func getNodeName(node ast.Node) string {
@@ -251,12 +261,11 @@ func (c *registry) resolveDefinitions() error {
 
 	for len(c.unresolvedDefs) > 0 && c.iterations < c.maxIterations {
 		c.iterations = c.iterations + 1
-		allowThunks := c.iterations == c.maxIterations
 
 		for _, definition := range c.unresolvedDefs {
 			switch nodeKind := definition.GetKind(); nodeKind {
 			case kinds.DirectiveDefinition:
-				if err := c.buildDirectiveFromAST(definition.(*ast.DirectiveDefinition), allowThunks); err != nil {
+				if err := c.buildDirectiveFromAST(definition.(*ast.DirectiveDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {
@@ -264,7 +273,7 @@ func (c *registry) resolveDefinitions() error {
 					}
 				}
 			case kinds.ScalarDefinition:
-				if err := c.buildScalarFromAST(definition.(*ast.ScalarDefinition), allowThunks); err != nil {
+				if err := c.buildScalarFromAST(definition.(*ast.ScalarDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {
@@ -272,7 +281,7 @@ func (c *registry) resolveDefinitions() error {
 					}
 				}
 			case kinds.EnumDefinition:
-				if err := c.buildEnumFromAST(definition.(*ast.EnumDefinition), allowThunks); err != nil {
+				if err := c.buildEnumFromAST(definition.(*ast.EnumDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {
@@ -280,7 +289,7 @@ func (c *registry) resolveDefinitions() error {
 					}
 				}
 			case kinds.InputObjectDefinition:
-				if err := c.buildInputObjectFromAST(definition.(*ast.InputObjectDefinition), allowThunks); err != nil {
+				if err := c.buildInputObjectFromAST(definition.(*ast.InputObjectDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {
@@ -288,7 +297,7 @@ func (c *registry) resolveDefinitions() error {
 					}
 				}
 			case kinds.ObjectDefinition:
-				if err := c.buildObjectFromAST(definition.(*ast.ObjectDefinition), allowThunks); err != nil {
+				if err := c.buildObjectFromAST(definition.(*ast.ObjectDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {
@@ -296,7 +305,7 @@ func (c *registry) resolveDefinitions() error {
 					}
 				}
 			case kinds.InterfaceDefinition:
-				if err := c.buildInterfaceFromAST(definition.(*ast.InterfaceDefinition), allowThunks); err != nil {
+				if err := c.buildInterfaceFromAST(definition.(*ast.InterfaceDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {
@@ -304,7 +313,7 @@ func (c *registry) resolveDefinitions() error {
 					}
 				}
 			case kinds.UnionDefinition:
-				if err := c.buildUnionFromAST(definition.(*ast.UnionDefinition), allowThunks); err != nil {
+				if err := c.buildUnionFromAST(definition.(*ast.UnionDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {
@@ -312,7 +321,7 @@ func (c *registry) resolveDefinitions() error {
 					}
 				}
 			case kinds.SchemaDefinition:
-				if err := c.buildSchemaFromAST(definition.(*ast.SchemaDefinition), allowThunks); err != nil {
+				if err := c.buildSchemaFromAST(definition.(*ast.SchemaDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {

@@ -15,7 +15,7 @@ import (
 
 // Prepares an object map of argument values given a list of argument
 // definitions and list of argument AST nodes.
-func getArgumentValues(argDefs []*graphql.Argument, argASTs []*ast.Argument, variableVariables map[string]interface{}) (map[string]interface{}, error) {
+func GetArgumentValues(argDefs []*graphql.Argument, argASTs []*ast.Argument, variableVariables map[string]interface{}) (map[string]interface{}, error) {
 
 	argASTMap := map[string]*ast.Argument{}
 	for _, argAST := range argASTs {

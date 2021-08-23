@@ -1,6 +1,10 @@
 package tools
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
 )
@@ -12,14 +16,14 @@ const (
 	DefaultRootSubscriptionName = "Subscription"
 )
 
-// MakeExecutableSchema is shorthand for ExecutableSchema{}.Make()
+// MakeExecutableSchema is shorthand for ExecutableSchema{}.Make(ctx context.Context)
 func MakeExecutableSchema(config ExecutableSchema) (graphql.Schema, error) {
-	return config.Make()
+	return config.Make(context.Background())
 }
 
-// MakeSchemaConfig creates a schema config that maintain intact types
-func MakeSchemaConfig(config ExecutableSchema) (graphql.SchemaConfig, error) {
-	return config.MakeSchemaConfig()
+// MakeExecutableSchemaWithContext make a schema and supply a context
+func MakeExecutableSchemaWithContext(ctx context.Context, config ExecutableSchema) (graphql.Schema, error) {
+	return config.Make(ctx)
 }
 
 // ExecutableSchema configuration for making an executable schema
@@ -27,39 +31,51 @@ func MakeSchemaConfig(config ExecutableSchema) (graphql.SchemaConfig, error) {
 // https://www.apollographql.com/docs/graphql-tools/generate-schema
 type ExecutableSchema struct {
 	TypeDefs         interface{}               // a string, []string, or func() []string
-	Resolvers        map[string]Resolver       // a map of Resolver, Directive, Scalar, Enum, Object, InputObject, Union, or Interface
+	Resolvers        map[string]interface{}    // a map of Resolver, Directive, Scalar, Enum, Object, InputObject, Union, or Interface
 	SchemaDirectives SchemaDirectiveVisitorMap // Map of SchemaDirectiveVisitor
 	Extensions       []graphql.Extension       // GraphQL extensions
+	Debug            bool                      // Prints debug messages during compile
 }
 
-// MakeSchemaConfig creates a graphql schema config, this struct maintains intact the types and does not require the use of a non empty Query
-func (c *ExecutableSchema) MakeSchemaConfig() (graphql.SchemaConfig, error) {
+// Make creates a graphql schema config, this struct maintains intact the types and does not require the use of a non empty Query
+func (c *ExecutableSchema) Make(ctx context.Context) (graphql.Schema, error) {
 	// combine the TypeDefs
 	document, err := c.ConcatenateTypeDefs()
 	if err != nil {
-		return graphql.SchemaConfig{}, err
+		return graphql.Schema{}, err
 	}
 
 	// create a new registry
-	registry := newRegistry(c.Resolvers, c.SchemaDirectives, c.Extensions, document)
+	registry, err := newRegistry(ctx, c.Resolvers, c.SchemaDirectives, c.Extensions, document)
+	if err != nil {
+		return graphql.Schema{}, err
+	}
+
+	if registry.dependencyMap, err = registry.IdentifyDependencies(); err != nil {
+		return graphql.Schema{}, err
+	}
 
 	// resolve the document definitions
 	if err := registry.resolveDefinitions(); err != nil {
-		return graphql.SchemaConfig{}, err
+		return graphql.Schema{}, err
 	}
 
 	// check if schema was created by definition
-	if registry.schemaConfig != nil {
-		return *registry.schemaConfig, nil
+	if registry.schema != nil {
+		return *registry.schema, nil
 	}
 
 	// otherwise build a schema from default object names
-	query, _ := registry.getObject(DefaultRootQueryName)
+	query, err := registry.getObject(DefaultRootQueryName)
+	if err != nil {
+		return graphql.Schema{}, err
+	}
+
 	mutation, _ := registry.getObject(DefaultRootMutationName)
 	subscription, _ := registry.getObject(DefaultRootSubscriptionName)
 
 	// create a new schema config
-	schemaConfig := graphql.SchemaConfig{
+	schemaConfig := &graphql.SchemaConfig{
 		Query:        query,
 		Mutation:     mutation,
 		Subscription: subscription,
@@ -67,22 +83,21 @@ func (c *ExecutableSchema) MakeSchemaConfig() (graphql.SchemaConfig, error) {
 		Directives:   registry.directiveArray(),
 		Extensions:   c.Extensions,
 	}
-	return schemaConfig, nil
-}
 
-// Make creates an executable graphql schema
-func (c *ExecutableSchema) Make() (graphql.Schema, error) {
-	schemaConfig, err := c.MakeSchemaConfig()
-	if err != nil {
-		return graphql.Schema{}, err
+	schema, err := graphql.NewSchema(*schemaConfig)
+	if err != nil && c.Debug {
+		j, _ := json.MarshalIndent(registry.dependencyMap, "", "  ")
+		fmt.Println("Unresolved types, thunks will be used")
+		fmt.Println(string(j))
 	}
+
 	// create a new schema
-	return graphql.NewSchema(schemaConfig)
+	return schema, nil
 }
 
 // build a schema from an ast
-func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition, allowThunks bool) error {
-	schemaConfig := graphql.SchemaConfig{
+func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition) error {
+	schemaConfig := &graphql.SchemaConfig{
 		Types:      c.typeArray(),
 		Directives: c.directiveArray(),
 		Extensions: c.extensions,
@@ -113,17 +128,20 @@ func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition, allowThu
 	}
 
 	// apply schema directives
-	if err := c.applyDirectives(&schemaConfig, definition.Directives, allowThunks); err != nil {
+	if err := c.applyDirectives(applyDirectiveParams{
+		config:     schemaConfig,
+		directives: definition.Directives,
+		node:       definition,
+	}); err != nil {
 		return err
 	}
 
 	// build the schema
-	schema, err := graphql.NewSchema(schemaConfig)
+	schema, err := graphql.NewSchema(*schemaConfig)
 	if err != nil {
 		return err
 	}
 
 	c.schema = &schema
-	c.schemaConfig = &schemaConfig
 	return nil
 }

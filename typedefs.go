@@ -20,7 +20,7 @@ func (c *ExecutableSchema) ConcatenateTypeDefs() (*ast.Document, error) {
 	case func() []string:
 		return c.concatenateTypeDefs(c.TypeDefs.(func() []string)())
 	}
-	return nil, fmt.Errorf("Unsupported TypeDefs value. Must be one of string, []string, or func() []string")
+	return nil, fmt.Errorf("unsupported TypeDefs value. Must be one of string, []string, or func() []string")
 }
 
 // performs the actual concatenation of the types by parsing each

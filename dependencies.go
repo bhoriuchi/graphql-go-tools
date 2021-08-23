@@ -9,7 +9,7 @@ import (
 
 type DependencyMap map[string]map[string]interface{}
 
-func (r *registry) IdentifyDependencies() DependencyMap {
+func (r *registry) IdentifyDependencies() (DependencyMap, error) {
 	m := DependencyMap{}
 
 	// get list of initial types, all dependencies should be resolved
@@ -20,7 +20,9 @@ func (r *registry) IdentifyDependencies() DependencyMap {
 	for _, def := range r.unresolvedDefs {
 		switch nodeKind := def.GetKind(); nodeKind {
 		case kinds.DirectiveDefinition:
-			identifyDirectiveDependencies(m, def.(*ast.DirectiveDefinition))
+			if err := identifyDirectiveDependencies(m, def.(*ast.DirectiveDefinition)); err != nil {
+				return nil, err
+			}
 		case kinds.ScalarDefinition:
 			scalar := def.(*ast.ScalarDefinition)
 			m[scalar.Name.Value] = map[string]interface{}{}
@@ -28,13 +30,21 @@ func (r *registry) IdentifyDependencies() DependencyMap {
 			enum := def.(*ast.EnumDefinition)
 			m[enum.Name.Value] = map[string]interface{}{}
 		case kinds.InputObjectDefinition:
-			identifyInputDependencies(m, def.(*ast.InputObjectDefinition))
+			if err := identifyInputDependencies(m, def.(*ast.InputObjectDefinition)); err != nil {
+				return nil, err
+			}
 		case kinds.ObjectDefinition:
-			identifyObjectDependencies(m, def.(*ast.ObjectDefinition))
+			if err := identifyObjectDependencies(m, def.(*ast.ObjectDefinition)); err != nil {
+				return nil, err
+			}
 		case kinds.InterfaceDefinition:
-			identifyInterfaceDependencies(m, def.(*ast.InterfaceDefinition))
+			if err := identifyInterfaceDependencies(m, def.(*ast.InterfaceDefinition)); err != nil {
+				return nil, err
+			}
 		case kinds.UnionDefinition:
-			identifyUnionDependencies(m, def.(*ast.UnionDefinition))
+			if err := identifyUnionDependencies(m, def.(*ast.UnionDefinition)); err != nil {
+				return nil, err
+			}
 		case kinds.SchemaDefinition:
 			identifySchemaDependencies(m, def.(*ast.SchemaDefinition))
 		}
@@ -65,7 +75,7 @@ func (r *registry) IdentifyDependencies() DependencyMap {
 		}
 	}
 
-	return m
+	return m, nil
 }
 
 func isPrimitiveType(t string) bool {

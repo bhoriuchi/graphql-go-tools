@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
@@ -17,7 +16,6 @@ var errUnresolvedDependencies = errors.New("unresolved dependencies")
 // registry the registry holds all of the types
 type registry struct {
 	ctx              context.Context
-	mx               sync.Mutex
 	types            map[string]graphql.Type
 	directives       map[string]*graphql.Directive
 	schema           *graphql.Schema
@@ -82,9 +80,6 @@ func newRegistry(
 
 // looks up a resolver by name or returns nil
 func (c *registry) getResolver(name string) Resolver {
-	c.mx.Lock()
-	defer c.mx.Unlock()
-
 	if c.resolverMap != nil {
 		if resolver, ok := c.resolverMap[name]; ok {
 			return resolver
@@ -128,13 +123,6 @@ func (c *registry) getType(name string) (graphql.Type, error) {
 	return nil, errUnresolvedDependencies
 }
 
-// Set sets a graphql type in the registry
-/*
-func (c *registry) setType(name string, graphqlType graphql.Type) {
-	c.types[name] = graphqlType
-}
-*/
-
 // Get gets a directive from the registry
 func (c *registry) getDirective(name string) (*graphql.Directive, error) {
 	if val, ok := c.directives[name]; ok {
@@ -142,13 +130,6 @@ func (c *registry) getDirective(name string) (*graphql.Directive, error) {
 	}
 	return nil, errUnresolvedDependencies
 }
-
-// Set sets a graphql directive in the registry
-/*
-func (c *registry) setDirective(name string, graphqlDirective *graphql.Directive) {
-	c.directives[name] = graphqlDirective
-}
-*/
 
 // gets the extensions for the current type
 func (c *registry) getExtensions(name, kind string) []*ast.ObjectDefinition {
@@ -168,9 +149,6 @@ func (c *registry) getExtensions(name, kind string) []*ast.ObjectDefinition {
 
 // imports a resolver from an interface
 func (c *registry) importResolver(name string, resolver interface{}) error {
-	c.mx.Lock()
-	defer c.mx.Unlock()
-
 	switch res := resolver.(type) {
 	case *graphql.Directive:
 		// allow @ to be prefixed to a directive in the event there is a type with the same
@@ -283,12 +261,11 @@ func (c *registry) resolveDefinitions() error {
 
 	for len(c.unresolvedDefs) > 0 && c.iterations < c.maxIterations {
 		c.iterations = c.iterations + 1
-		allowThunks := c.iterations >= c.maxIterations-1
 
 		for _, definition := range c.unresolvedDefs {
 			switch nodeKind := definition.GetKind(); nodeKind {
 			case kinds.DirectiveDefinition:
-				if err := c.buildDirectiveFromAST(definition.(*ast.DirectiveDefinition), allowThunks); err != nil {
+				if err := c.buildDirectiveFromAST(definition.(*ast.DirectiveDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {
@@ -296,7 +273,7 @@ func (c *registry) resolveDefinitions() error {
 					}
 				}
 			case kinds.ScalarDefinition:
-				if err := c.buildScalarFromAST(definition.(*ast.ScalarDefinition), allowThunks); err != nil {
+				if err := c.buildScalarFromAST(definition.(*ast.ScalarDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {
@@ -304,7 +281,7 @@ func (c *registry) resolveDefinitions() error {
 					}
 				}
 			case kinds.EnumDefinition:
-				if err := c.buildEnumFromAST(definition.(*ast.EnumDefinition), allowThunks); err != nil {
+				if err := c.buildEnumFromAST(definition.(*ast.EnumDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {
@@ -312,7 +289,7 @@ func (c *registry) resolveDefinitions() error {
 					}
 				}
 			case kinds.InputObjectDefinition:
-				if err := c.buildInputObjectFromAST(definition.(*ast.InputObjectDefinition), allowThunks); err != nil {
+				if err := c.buildInputObjectFromAST(definition.(*ast.InputObjectDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {
@@ -320,7 +297,7 @@ func (c *registry) resolveDefinitions() error {
 					}
 				}
 			case kinds.ObjectDefinition:
-				if err := c.buildObjectFromAST(definition.(*ast.ObjectDefinition), allowThunks); err != nil {
+				if err := c.buildObjectFromAST(definition.(*ast.ObjectDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {
@@ -328,7 +305,7 @@ func (c *registry) resolveDefinitions() error {
 					}
 				}
 			case kinds.InterfaceDefinition:
-				if err := c.buildInterfaceFromAST(definition.(*ast.InterfaceDefinition), allowThunks); err != nil {
+				if err := c.buildInterfaceFromAST(definition.(*ast.InterfaceDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {
@@ -336,7 +313,7 @@ func (c *registry) resolveDefinitions() error {
 					}
 				}
 			case kinds.UnionDefinition:
-				if err := c.buildUnionFromAST(definition.(*ast.UnionDefinition), allowThunks); err != nil {
+				if err := c.buildUnionFromAST(definition.(*ast.UnionDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {
@@ -344,7 +321,7 @@ func (c *registry) resolveDefinitions() error {
 					}
 				}
 			case kinds.SchemaDefinition:
-				if err := c.buildSchemaFromAST(definition.(*ast.SchemaDefinition), allowThunks); err != nil {
+				if err := c.buildSchemaFromAST(definition.(*ast.SchemaDefinition)); err != nil {
 					if err == errUnresolvedDependencies {
 						unresolved = append(unresolved, definition)
 					} else {

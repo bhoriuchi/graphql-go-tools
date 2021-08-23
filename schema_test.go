@@ -148,8 +148,8 @@ type Query {
 		},
 	})
 
-	if err == nil {
-		t.Error("expected undefined type error")
+	if err != nil {
+		t.Error("failed to use tunks for cyclic type")
 		return
 	}
 }

@@ -143,7 +143,7 @@ func (c *registry) directiveArray() []*graphql.Directive {
 }
 
 // builds directives from ast
-func (c *registry) buildDirectiveFromAST(definition *ast.DirectiveDefinition, allowThunks bool) error {
+func (c *registry) buildDirectiveFromAST(definition *ast.DirectiveDefinition) error {
 	name := definition.Name.Value
 	directiveConfig := graphql.DirectiveConfig{
 		Name:        name,
@@ -153,7 +153,7 @@ func (c *registry) buildDirectiveFromAST(definition *ast.DirectiveDefinition, al
 	}
 
 	for _, arg := range definition.Arguments {
-		if argValue, err := c.buildArgFromAST(arg, allowThunks); err == nil {
+		if argValue, err := c.buildArgFromAST(arg); err == nil {
 			directiveConfig.Args[arg.Name.Value] = argValue
 		} else {
 			return err
@@ -169,13 +169,12 @@ func (c *registry) buildDirectiveFromAST(definition *ast.DirectiveDefinition, al
 }
 
 type applyDirectiveParams struct {
-	config      interface{}
-	directives  []*ast.Directive
-	node        interface{}
-	extensions  []*ast.ObjectDefinition
-	allowThunks bool
-	parentName  string
-	parentKind  string
+	config     interface{}
+	directives []*ast.Directive
+	node       interface{}
+	extensions []*ast.ObjectDefinition
+	parentName string
+	parentKind string
 }
 
 // applies directives

@@ -34,6 +34,7 @@ type ExecutableSchema struct {
 	Resolvers        map[string]interface{}    // a map of Resolver, Directive, Scalar, Enum, Object, InputObject, Union, or Interface
 	SchemaDirectives SchemaDirectiveVisitorMap // Map of SchemaDirectiveVisitor
 	Extensions       []graphql.Extension       // GraphQL extensions
+	Debug            bool                      // Prints debug messages during compile
 }
 
 // Make creates a graphql schema config, this struct maintains intact the types and does not require the use of a non empty Query
@@ -50,7 +51,9 @@ func (c *ExecutableSchema) Make(ctx context.Context) (graphql.Schema, error) {
 		return graphql.Schema{}, err
 	}
 
-	registry.dependencyMap = registry.IdentifyDependencies()
+	if registry.dependencyMap, err = registry.IdentifyDependencies(); err != nil {
+		return graphql.Schema{}, err
+	}
 
 	// resolve the document definitions
 	if err := registry.resolveDefinitions(); err != nil {
@@ -82,8 +85,9 @@ func (c *ExecutableSchema) Make(ctx context.Context) (graphql.Schema, error) {
 	}
 
 	schema, err := graphql.NewSchema(*schemaConfig)
-	if err != nil {
+	if err != nil && c.Debug {
 		j, _ := json.MarshalIndent(registry.dependencyMap, "", "  ")
+		fmt.Println("Unresolved types, thunks will be used")
 		fmt.Println(string(j))
 	}
 
@@ -92,7 +96,7 @@ func (c *ExecutableSchema) Make(ctx context.Context) (graphql.Schema, error) {
 }
 
 // build a schema from an ast
-func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition, allowThunks bool) error {
+func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition) error {
 	schemaConfig := &graphql.SchemaConfig{
 		Types:      c.typeArray(),
 		Directives: c.directiveArray(),
@@ -125,10 +129,9 @@ func (c *registry) buildSchemaFromAST(definition *ast.SchemaDefinition, allowThu
 
 	// apply schema directives
 	if err := c.applyDirectives(applyDirectiveParams{
-		config:      schemaConfig,
-		directives:  definition.Directives,
-		node:        definition,
-		allowThunks: allowThunks,
+		config:     schemaConfig,
+		directives: definition.Directives,
+		node:       definition,
 	}); err != nil {
 		return err
 	}

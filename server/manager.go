@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"sync"
 
 	"github.com/graphql-go/graphql"
@@ -12,22 +13,24 @@ type ChanMgr struct {
 }
 
 type ResultChan struct {
-	ch chan *graphql.Result
+	ch         chan *graphql.Result
+	cancelFunc context.CancelFunc
+	ctx        context.Context
+	cid        string
+	oid        string
 }
 
-func (c *ChanMgr) Add(cid, oid string, ch chan *graphql.Result) {
+func (c *ChanMgr) Add(rc *ResultChan) { // Add(cid, oid string, ch chan *graphql.Result) {
 	c.mx.Lock()
 	defer c.mx.Unlock()
 
-	conn, ok := c.conns[cid]
+	conn, ok := c.conns[rc.cid]
 	if !ok {
 		conn = make(map[string]*ResultChan)
-		c.conns[cid] = conn
+		c.conns[rc.cid] = conn
 	}
 
-	conn[oid] = &ResultChan{
-		ch: ch,
-	}
+	conn[rc.oid] = rc
 }
 
 func (c *ChanMgr) DelConn(cid string) bool {
@@ -39,7 +42,10 @@ func (c *ChanMgr) DelConn(cid string) bool {
 		return false
 	}
 
-	for oid := range conn {
+	for oid, rc := range conn {
+		if rc.cancelFunc != nil {
+			rc.cancelFunc()
+		}
 		delete(conn, oid)
 	}
 
@@ -56,10 +62,14 @@ func (c *ChanMgr) Del(cid, oid string) bool {
 		return false
 	}
 
-	if _, ok := conn[oid]; !ok {
+	rc, ok := conn[oid]
+	if !ok {
 		return false
 	}
 
+	if rc.cancelFunc != nil {
+		rc.cancelFunc()
+	}
 	delete(conn, oid)
 
 	if len(c.conns[cid]) == 0 {

@@ -30,7 +30,7 @@ func (s *Server) newGraphQLWSConnection(ctx context.Context, r *http.Request, ws
 				if s.options.RootValueFunc != nil {
 					rootObject = s.options.RootValueFunc(ctx, r)
 				}
-				ctx := context.WithValue(context.Background(), ConnKey, conn)
+				ctx, cancelFunc := context.WithCancel(context.WithValue(context.Background(), ConnKey, conn))
 				resultChannel := graphql.Subscribe(graphql.Params{
 					Schema:         s.schema,
 					RequestString:  data.Query,
@@ -40,7 +40,13 @@ func (s *Server) newGraphQLWSConnection(ctx context.Context, r *http.Request, ws
 					RootObject:     rootObject,
 				})
 
-				s.mgr.Add(conn.ID(), opID, resultChannel)
+				s.mgr.Add(&ResultChan{
+					ch:         resultChannel,
+					cancelFunc: cancelFunc,
+					ctx:        ctx,
+					cid:        conn.ID(),
+					oid:        opID,
+				})
 
 				go func() {
 					for {

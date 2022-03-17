@@ -13,12 +13,22 @@ import (
 var GraphiqlVersion = "1.4.1"
 
 type GraphiQLOptions struct {
-	Version string
+	Version              string
+	SSL                  bool
+	Endpoint             string
+	SubscriptionEndpoint string
 }
 
 func NewDefaultGraphiQLOptions() *GraphiQLOptions {
 	return &GraphiQLOptions{
 		Version: GraphiqlVersion,
+	}
+}
+
+func NewDefaultSSLGraphiQLOption() *GraphiQLOptions {
+	return &GraphiQLOptions{
+		Version: GraphiqlVersion,
+		SSL:     true,
 	}
 }
 
@@ -67,13 +77,19 @@ func renderGraphiQL(config *GraphiQLOptions, w http.ResponseWriter, r *http.Requ
 	}
 
 	endpoint := r.URL.Path
+	if config.Endpoint != "" {
+		endpoint = config.Endpoint
+	}
 
 	wsScheme := "ws:"
-	if r.URL.Scheme == "https:" {
+	if config.SSL {
 		wsScheme = "wss:"
 	}
 
 	subscriptionEndpoint := fmt.Sprintf("%s//%v%s", wsScheme, r.Host, r.URL.Path)
+	if config.SubscriptionEndpoint != "" {
+		subscriptionEndpoint = config.SubscriptionEndpoint
+	}
 
 	d := graphiqlData{
 		GraphiqlVersion:      GraphiqlVersion,

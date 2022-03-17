@@ -10,12 +10,22 @@ import (
 var PlaygroundVersion = "1.7.27"
 
 type PlaygroundOptions struct {
-	Version string
+	Version              string
+	SSL                  bool
+	Endpoint             string
+	SubscriptionEndpoint string
 }
 
 func NewDefaultPlaygroundOptions() *PlaygroundOptions {
 	return &PlaygroundOptions{
 		Version: PlaygroundVersion,
+	}
+}
+
+func NewDefaultSSLPlaygroundOptions() *PlaygroundOptions {
+	return &PlaygroundOptions{
+		Version: PlaygroundVersion,
+		SSL:     true,
 	}
 }
 
@@ -28,6 +38,8 @@ type playgroundData struct {
 
 // renderPlayground renders the Playground GUI
 func renderPlayground(config *PlaygroundOptions, w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("CONFIG %+v\n", config)
+
 	t := template.New("Playground")
 	t, err := t.Parse(graphcoolPlaygroundTemplate)
 	if err != nil {
@@ -36,13 +48,20 @@ func renderPlayground(config *PlaygroundOptions, w http.ResponseWriter, r *http.
 	}
 
 	endpoint := r.URL.Path
+	if config.Endpoint != "" {
+		endpoint = config.Endpoint
+	}
 
 	wsScheme := "ws:"
-	if r.URL.Scheme == "https:" {
+	if config.SSL {
 		wsScheme = "wss:"
 	}
 
 	subscriptionEndpoint := fmt.Sprintf("%s//%v%s", wsScheme, r.Host, r.URL.Path)
+	if config.SubscriptionEndpoint != "" {
+		subscriptionEndpoint = config.SubscriptionEndpoint
+	}
+
 	version := PlaygroundVersion
 	if config.Version != "" {
 		version = config.Version

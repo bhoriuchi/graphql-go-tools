@@ -152,10 +152,15 @@ func (c *registry) buildInputObjectFieldFromAST(definition *ast.InputValueDefini
 		return nil, err
 	}
 
+	defaultValue, err := getDefaultValue(definition)
+	if err != nil {
+		return nil, err
+	}
+
 	field := graphql.InputObjectFieldConfig{
 		Type:         inputType,
 		Description:  getDescription(definition),
-		DefaultValue: getDefaultValue(definition),
+		DefaultValue: defaultValue,
 	}
 
 	if err := c.applyDirectives(applyDirectiveParams{
@@ -349,10 +354,16 @@ func (c *registry) buildArgFromAST(definition *ast.InputValueDefinition) (*graph
 	if err != nil {
 		return nil, err
 	}
+
+	defaultValue, err := getDefaultValue(definition)
+	if err != nil {
+		return nil, err
+	}
+
 	arg := graphql.ArgumentConfig{
 		Type:         inputType,
 		Description:  getDescription(definition),
-		DefaultValue: getDefaultValue(definition),
+		DefaultValue: defaultValue,
 	}
 
 	if err := c.applyDirectives(applyDirectiveParams{

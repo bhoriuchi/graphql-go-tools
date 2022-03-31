@@ -78,12 +78,63 @@ func getDescription(node ast.DescribableNode) string {
 	return ""
 }
 
-// gets the default value or defaults to nil
-func getDefaultValue(input *ast.InputValueDefinition) interface{} {
-	if value := input.DefaultValue; value != nil {
-		return value.GetValue()
+func parseDefaultValue(inputType ast.Type, value interface{}) (interface{}, error) {
+	if value == nil {
+		return nil, nil
 	}
-	return nil
+
+	switch t := inputType.(type) {
+	// non-null call parse on type
+	case *ast.NonNull:
+		return parseDefaultValue(t.Type, value)
+
+	// list parse each item in the list
+	case *ast.List:
+		switch a := value.(type) {
+		case []ast.Value:
+			arr := []interface{}{}
+			for _, v := range a {
+				val, err := parseDefaultValue(t.Type, v.GetValue())
+				if err != nil {
+					return nil, err
+				}
+
+				arr = append(arr, val)
+			}
+			return arr, nil
+		}
+
+	// parse the specific type
+	case *ast.Named:
+		switch t.Name.Value {
+		case "Int":
+			value = graphql.Int.ParseValue(value)
+		case "Float":
+			value = graphql.Float.ParseValue(value)
+		case "Boolean":
+			value = graphql.Boolean.ParseValue(value)
+		case "ID":
+			value = graphql.ID.ParseValue(value)
+		case "String":
+			value = graphql.String.ParseValue(value)
+		}
+	}
+
+	return value, nil
+}
+
+// gets the default value or defaults to nil
+func getDefaultValue(input *ast.InputValueDefinition) (interface{}, error) {
+	if input.DefaultValue == nil {
+		return nil, nil
+	}
+
+	defaultValue, err := parseDefaultValue(input.Type, input.DefaultValue.GetValue())
+	if err != nil {
+		return nil, err
+	}
+
+	return defaultValue, err
 }
 
 // ReadSourceFiles reads all source files from a specified path
@@ -94,14 +145,14 @@ func ReadSourceFiles(p string, recursive ...bool) (string, error) {
 		return "", err
 	}
 
-	var readFunc = func(dirPath string, info os.FileInfo, err error) error {
+	var readFunc = func(p string, info os.FileInfo, err error) error {
 		if info.IsDir() {
 			return nil
 		}
 
 		switch ext := strings.ToLower(filepath.Ext(info.Name())); ext {
 		case ".gql", ".graphql":
-			data, err := ioutil.ReadFile(filepath.Join(dirPath, info.Name()))
+			data, err := ioutil.ReadFile(p)
 			if err != nil {
 				return err
 			}

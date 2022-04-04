@@ -46,7 +46,7 @@ type Query {
 		},
 		SchemaDirectives: SchemaDirectiveVisitorMap{
 			"test": &SchemaDirectiveVisitor{
-				VisitFieldDefinition: func(v VisitFieldDefinitionParams) {
+				VisitFieldDefinition: func(v VisitFieldDefinitionParams) error {
 					resolveFunc := v.Config.Resolve
 					v.Config.Resolve = func(p graphql.ResolveParams) (interface{}, error) {
 						result, err := resolveFunc(p)
@@ -58,6 +58,8 @@ type Query {
 						res0["description"] = v.Args["message"]
 						return res, nil
 					}
+
+					return nil
 				},
 			},
 		},

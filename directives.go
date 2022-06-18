@@ -23,17 +23,17 @@ var HideDirective = graphql.NewDirective(graphql.DirectiveConfig{
 // This attempts to provide similar functionality to Apollo graphql-tools
 // https://www.apollographql.com/docs/graphql-tools/schema-directives/
 type SchemaDirectiveVisitor struct {
-	VisitSchema               func(p VisitSchemaParams)
-	VisitScalar               func(p VisitScalarParams)
-	VisitObject               func(p VisitObjectParams)
-	VisitFieldDefinition      func(p VisitFieldDefinitionParams)
-	VisitArgumentDefinition   func(p VisitArgumentDefinitionParams)
-	VisitInterface            func(p VisitInterfaceParams)
-	VisitUnion                func(p VisitUnionParams)
-	VisitEnum                 func(p VisitEnumParams)
-	VisitEnumValue            func(p VisitEnumValueParams)
-	VisitInputObject          func(p VisitInputObjectParams)
-	VisitInputFieldDefinition func(p VisitInputFieldDefinitionParams)
+	VisitSchema               func(p VisitSchemaParams) error
+	VisitScalar               func(p VisitScalarParams) error
+	VisitObject               func(p VisitObjectParams) error
+	VisitFieldDefinition      func(p VisitFieldDefinitionParams) error
+	VisitArgumentDefinition   func(p VisitArgumentDefinitionParams) error
+	VisitInterface            func(p VisitInterfaceParams) error
+	VisitUnion                func(p VisitUnionParams) error
+	VisitEnum                 func(p VisitEnumParams) error
+	VisitEnumValue            func(p VisitEnumValueParams) error
+	VisitInputObject          func(p VisitInputObjectParams) error
+	VisitInputFieldDefinition func(p VisitInputFieldDefinitionParams) error
 }
 
 // VisitSchemaParams params

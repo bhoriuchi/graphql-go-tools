@@ -30,11 +30,17 @@ func MakeExecutableSchemaWithContext(ctx context.Context, config ExecutableSchem
 // this attempts to provide similar functionality to Apollo graphql-tools
 // https://www.apollographql.com/docs/graphql-tools/generate-schema
 type ExecutableSchema struct {
+	document         *ast.Document
 	TypeDefs         interface{}               // a string, []string, or func() []string
 	Resolvers        map[string]interface{}    // a map of Resolver, Directive, Scalar, Enum, Object, InputObject, Union, or Interface
 	SchemaDirectives SchemaDirectiveVisitorMap // Map of SchemaDirectiveVisitor
 	Extensions       []graphql.Extension       // GraphQL extensions
 	Debug            bool                      // Prints debug messages during compile
+}
+
+// Document returns the document
+func (c *ExecutableSchema) Document() *ast.Document {
+	return c.document
 }
 
 // Make creates a graphql schema config, this struct maintains intact the types and does not require the use of a non empty Query
@@ -44,6 +50,8 @@ func (c *ExecutableSchema) Make(ctx context.Context) (graphql.Schema, error) {
 	if err != nil {
 		return graphql.Schema{}, err
 	}
+
+	c.document = document
 
 	// create a new registry
 	registry, err := newRegistry(ctx, c.Resolvers, c.SchemaDirectives, c.Extensions, document)

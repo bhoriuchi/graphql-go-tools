@@ -40,6 +40,11 @@ func (c *ExecutableSchema) concatenateTypeDefs(typeDefs []string) (*ast.Document
 			return nil, err
 		}
 
+		// if there is only 1 typedef, no de-duplication needs to happen
+		if len(typeDefs) == 1 {
+			return doc, nil
+		}
+
 		for _, typeDef := range doc.Definitions {
 			if def := printer.Print(typeDef); def != nil {
 				stringDef := strings.TrimSpace(def.(string))
@@ -53,10 +58,16 @@ func (c *ExecutableSchema) concatenateTypeDefs(typeDefs []string) (*ast.Document
 		typeArray = append(typeArray, def)
 	}
 
-	return parser.Parse(parser.ParseParams{
+	doc, err := parser.Parse(parser.ParseParams{
 		Source: &source.Source{
 			Body: []byte(strings.Join(typeArray, "\n")),
 			Name: "GraphQL",
 		},
 	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return doc, nil
 }

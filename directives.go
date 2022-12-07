@@ -203,105 +203,127 @@ func (c *registry) applyDirectives(p applyDirectiveParams) error {
 		switch p.config.(type) {
 		case *graphql.SchemaConfig:
 			if visitor.VisitSchema != nil {
-				visitor.VisitSchema(VisitSchemaParams{
+				if err := visitor.VisitSchema(VisitSchemaParams{
 					Context: c.ctx,
 					Config:  p.config.(*graphql.SchemaConfig),
 					Args:    args,
 					Node:    p.node.(*ast.SchemaDefinition),
-				})
+				}); err != nil {
+					return err
+				}
 			}
 		case *graphql.ScalarConfig:
 			if visitor.VisitScalar != nil {
-				visitor.VisitScalar(VisitScalarParams{
+				if err := visitor.VisitScalar(VisitScalarParams{
 					Context: c.ctx,
 					Config:  p.config.(*graphql.ScalarConfig),
 					Args:    args,
 					Node:    p.node.(*ast.ScalarDefinition),
-				})
+				}); err != nil {
+					return err
+				}
 			}
 		case *graphql.ObjectConfig:
 			if visitor.VisitObject != nil {
-				visitor.VisitObject(VisitObjectParams{
+				if err := visitor.VisitObject(VisitObjectParams{
 					Context:    c.ctx,
 					Config:     p.config.(*graphql.ObjectConfig),
 					Args:       args,
 					Node:       p.node.(*ast.ObjectDefinition),
 					Extensions: p.extensions,
-				})
+				}); err != nil {
+					return err
+				}
 			}
 		case *graphql.Field:
 			if visitor.VisitFieldDefinition != nil {
-				visitor.VisitFieldDefinition(VisitFieldDefinitionParams{
+				if err := visitor.VisitFieldDefinition(VisitFieldDefinitionParams{
 					Context:    c.ctx,
 					Config:     p.config.(*graphql.Field),
 					Args:       args,
 					Node:       p.node.(*ast.FieldDefinition),
 					ParentName: p.parentName,
 					ParentKind: p.parentKind,
-				})
+				}); err != nil {
+					return err
+				}
 			}
 		case *graphql.ArgumentConfig:
 			if visitor.VisitArgumentDefinition != nil {
-				visitor.VisitArgumentDefinition(VisitArgumentDefinitionParams{
+				if err := visitor.VisitArgumentDefinition(VisitArgumentDefinitionParams{
 					Context: c.ctx,
 					Config:  p.config.(*graphql.ArgumentConfig),
 					Args:    args,
 					Node:    p.node.(*ast.InputValueDefinition),
-				})
+				}); err != nil {
+					return err
+				}
 			}
 		case *graphql.InterfaceConfig:
 			if visitor.VisitInterface != nil {
-				visitor.VisitInterface(VisitInterfaceParams{
+				if err := visitor.VisitInterface(VisitInterfaceParams{
 					Context: c.ctx,
 					Config:  p.config.(*graphql.InterfaceConfig),
 					Args:    args,
 					Node:    p.node.(*ast.InterfaceDefinition),
-				})
+				}); err != nil {
+					return err
+				}
 			}
 		case *graphql.UnionConfig:
 			if visitor.VisitUnion != nil {
-				visitor.VisitUnion(VisitUnionParams{
+				if err := visitor.VisitUnion(VisitUnionParams{
 					Context: c.ctx,
 					Config:  p.config.(*graphql.UnionConfig),
 					Args:    args,
 					Node:    p.node.(*ast.UnionDefinition),
-				})
+				}); err != nil {
+					return err
+				}
 			}
 		case *graphql.EnumConfig:
 			if visitor.VisitEnum != nil {
-				visitor.VisitEnum(VisitEnumParams{
+				if err := visitor.VisitEnum(VisitEnumParams{
 					Context: c.ctx,
 					Config:  p.config.(*graphql.EnumConfig),
 					Args:    args,
 					Node:    p.node.(*ast.EnumDefinition),
-				})
+				}); err != nil {
+					return err
+				}
 			}
 		case *graphql.EnumValueConfig:
 			if visitor.VisitEnumValue != nil {
-				visitor.VisitEnumValue(VisitEnumValueParams{
+				if err := visitor.VisitEnumValue(VisitEnumValueParams{
 					Context: c.ctx,
 					Config:  p.config.(*graphql.EnumValueConfig),
 					Args:    args,
 					Node:    p.node.(*ast.EnumValueDefinition),
-				})
+				}); err != nil {
+					return err
+				}
 			}
 		case *graphql.InputObjectConfig:
 			if visitor.VisitInputObject != nil {
-				visitor.VisitInputObject(VisitInputObjectParams{
+				if err := visitor.VisitInputObject(VisitInputObjectParams{
 					Context: c.ctx,
 					Config:  p.config.(*graphql.InputObjectConfig),
 					Args:    args,
 					Node:    p.node.(*ast.InputObjectDefinition),
-				})
+				}); err != nil {
+					return err
+				}
 			}
 		case *graphql.InputObjectFieldConfig:
 			if visitor.VisitInputFieldDefinition != nil {
-				visitor.VisitInputFieldDefinition(VisitInputFieldDefinitionParams{
+				if err := visitor.VisitInputFieldDefinition(VisitInputFieldDefinitionParams{
 					Context: c.ctx,
 					Config:  p.config.(*graphql.InputObjectFieldConfig),
 					Args:    args,
 					Node:    p.node.(*ast.InputValueDefinition),
-				})
+				}); err != nil {
+					return err
+				}
 			}
 		}
 	}

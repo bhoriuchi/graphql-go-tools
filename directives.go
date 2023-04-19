@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
@@ -197,7 +198,7 @@ func (c *registry) applyDirectives(p applyDirectiveParams) error {
 
 		args, err := GetArgumentValues(directive.Args, def.Arguments, map[string]interface{}{})
 		if err != nil {
-			return err
+			return fmt.Errorf("applyDirective %v error: %s", p.config, err)
 		}
 
 		switch p.config.(type) {

@@ -42,7 +42,12 @@ func GetArgumentValues(argDefs []*graphql.Argument, argASTs []*ast.Argument, var
 		typeString := argDef.Type.String()
 		isNonNull := typeString[len(typeString)-1:] == "!"
 		if isNonNull && isNullish(value) {
-			return nil, fmt.Errorf("graphql input %q cannot be null", name)
+			locs := []string{}
+
+			for _, a := range argASTs {
+				locs = append(locs, fmt.Sprintf("%d:%d", a.Loc.Start, a.Loc.End))
+			}
+			return nil, fmt.Errorf(`graphql input %q @ %q cannot be null`, name, locs)
 		}
 
 		if !isNullish(value) {

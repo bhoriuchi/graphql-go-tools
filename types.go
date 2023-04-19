@@ -419,11 +419,7 @@ func (c *registry) buildFieldFromAST(definition *ast.FieldDefinition, kind, type
 // builds a union from ast
 func (c *registry) buildUnionFromAST(definition *ast.UnionDefinition) error {
 	name := definition.Name.Value
-	unionConfig := graphql.UnionConfig{
-		Name:        name,
-		Types:       []*graphql.Object{},
-		Description: getDescription(definition),
-	}
+	types := []*graphql.Object{}
 
 	// add types
 	for _, unionType := range definition.Types {
@@ -431,14 +427,19 @@ func (c *registry) buildUnionFromAST(definition *ast.UnionDefinition) error {
 		if err != nil {
 			return err
 		}
-		if object != nil {
-			switch o := object.(type) {
-			case *graphql.Object:
-				unionConfig.Types = append(unionConfig.Types, o)
-				continue
-			}
+
+		if o, ok := object.(*graphql.Object); ok {
+			types = append(types, o)
+			continue
 		}
+
 		return fmt.Errorf("build Union failed: no Object type %q found", unionType.Name.Value)
+	}
+
+	unionConfig := &graphql.UnionConfig{
+		Name:        name,
+		Types:       types,
+		Description: getDescription(definition),
 	}
 
 	// set ResolveType from resolvers
@@ -456,6 +457,6 @@ func (c *registry) buildUnionFromAST(definition *ast.UnionDefinition) error {
 		return err
 	}
 
-	c.types[name] = graphql.NewUnion(unionConfig)
+	c.types[name] = graphql.NewUnion(*unionConfig)
 	return nil
 }
